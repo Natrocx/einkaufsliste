@@ -1,0 +1,14 @@
+# For storing debug files:
+/test
+
+# Standard rust:
+/target
+/dist
+
+# TODO: sled db storage in local directory
+**/sled
+**/sled.db
+
+# Project-wide rustfmt settings (uncomment to change)
+# **/.rustfmt.toml
+# **/rustfmt.toml
