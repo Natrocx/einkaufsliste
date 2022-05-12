@@ -14,17 +14,13 @@ use crate::DbState;
 pub(crate) async fn get_example_article(state: web::Data<DbState>) -> actix_web::Result<HttpResponse, actix_web::Error> {
   let article = Article {
     id: state.db.generate_id().unwrap(),
-    name: "Warum so hässlich????".to_owned(),
-    description: Some("Ich hasse Kinder die wichser".to_owned()),
+    name: "name".to_owned(),
+    description: Some("description is present".to_owned()),
     image_id: None,
     shops: None,
   };
-  debug!("Sending object with unencoded size: {} bytes", std::mem::size_of_val(&article));
 
   let encoded = rkyv::to_bytes::<_, 384>(&article).unwrap();
-  let test = rkyv::from_bytes::<Article>(encoded.as_bytes()).unwrap();
-  
-  debug!("Sending object with in memory size of {} and wire size {}: {:?}", std::mem::size_of_val(&article), std::mem::size_of_val(encoded.as_bytes()), &test);
 
   Ok(HttpResponse::Ok().body(encoded.as_bytes().to_owned()))
 }
@@ -73,7 +69,6 @@ async fn store_article(
 
   db.insert::<&[u8], &[u8]>(archived.id.value().as_bytes(), buffer)
     .map_err(|_| ErrorInternalServerError("Failure storing value"))?;
-  log::debug!("{}", archived.name);
 
   Ok(HttpResponse::Ok().body(""))
 }
