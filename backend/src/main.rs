@@ -1,7 +1,9 @@
 mod api;
+mod util;
 
 use actix_web::web::{self};
 use actix_web::{middleware, HttpServer};
+use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -22,6 +24,9 @@ async fn main() -> std::io::Result<()> {
       .service(crate::api::article::store_article)
       .service(crate::api::article::get_article_by_id)
       .service(crate::api::item::get_item_by_id)
+      .service(get_item_list_flat)
+      .service(store_item_list)
+      .service(store_item_attached)
       .wrap(middleware::Logger::default())
   })
   .bind(("127.0.0.1", 8080))?

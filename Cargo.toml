@@ -11,7 +11,6 @@ bytecheck = "0.6.8"
 log = "0.4.17"
 rkyv = { version = "0.7.38", features = ["bytecheck", "validation", "rend", "archive_be"] }
 sled = "0.34.7"
-zerocopy = "0.6.1"
 
 [workspace]
 members = ["frontend", "backend"]

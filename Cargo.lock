@@ -477,7 +477,6 @@ dependencies = [
  "log",
  "rkyv",
  "sled",
- "zerocopy",
 ]
 
 [[package]]
@@ -569,6 +568,7 @@ dependencies = [
  "reqwest",
  "rkyv",
  "tokio",
+ "zerocopy",
 ]
 
 [[package]]

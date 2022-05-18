@@ -1,17 +1,14 @@
-
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
+use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::web::{self};
-use actix_web::{get, post, HttpResponse};
-use bytes::Bytes;
-use einkaufsliste::model::*;
-use futures::StreamExt;
-use log::debug;
+use actix_web::{get, post, Error, HttpResponse, Result};
+use einkaufsliste::model::article::{ArchivedArticle, Article};
 use zerocopy::AsBytes;
 
+use crate::util::collect_from_payload;
 use crate::DbState;
 
 #[get("/article/test")]
-pub(crate) async fn get_example_article(state: web::Data<DbState>) -> actix_web::Result<HttpResponse, actix_web::Error> {
+pub(crate) async fn get_example_article(state: web::Data<DbState>) -> Result<HttpResponse, Error> {
   let article = Article {
     id: state.db.generate_id().unwrap(),
     name: "name".to_owned(),
@@ -26,10 +23,7 @@ pub(crate) async fn get_example_article(state: web::Data<DbState>) -> actix_web:
 }
 
 #[get("/article/{id}")]
-async fn get_article_by_id(
-  id: actix_web::web::Path<String>,
-  state: web::Data<DbState>,
-) -> actix_web::Result<HttpResponse, actix_web::Error> {
+async fn get_article_by_id(id: actix_web::web::Path<String>, state: web::Data<DbState>) -> Result<HttpResponse, Error> {
   let value = state
     .article_db
     .get(
@@ -51,15 +45,12 @@ async fn get_article_by_id(
 }
 
 #[post("/article")]
-async fn store_article(
-  body: actix_web::web::Payload,
-  data: web::Data<DbState>,
-) -> actix_web::Result<HttpResponse, actix_web::Error> {
+async fn store_article(body: actix_web::web::Payload, data: web::Data<DbState>) -> Result<HttpResponse, Error> {
   let params = collect_from_payload(body).await?;
   let buffer = params.as_bytes();
 
   if buffer.len() < std::mem::size_of::<ArchivedArticle>() {
-    return Err(actix_web::error::ErrorBadRequest("Incomplete data"));
+    return Err(ErrorBadRequest("Incomplete data"));
   }
   let archived = match rkyv::check_archived_root::<Article>(buffer) {
     Ok(val) => val,
@@ -70,23 +61,5 @@ async fn store_article(
   db.insert::<&[u8], &[u8]>(archived.id.value().as_bytes(), buffer)
     .map_err(|_| ErrorInternalServerError("Failure storing value"))?;
 
-  Ok(HttpResponse::Ok().body(""))
-}
-
-/*
- * Adapted from actix documentation
- */
-const MAX_SIZE: usize = 32_768; // max payload size in bytes
-async fn collect_from_payload(mut payload: web::Payload) -> actix_web::Result<Bytes, actix_web::Error> {
-  let mut bytes = web::BytesMut::new();
-
-  while let Some(chunk) = payload.next().await {
-    let chunk = chunk?;
-    if (bytes.len() + chunk.len()) > MAX_SIZE {
-      return Err(actix_web::error::ErrorBadRequest("overflow"));
-    }
-    bytes.extend_from_slice(&chunk);
-  }
-
-  Ok(bytes.into())
+  Ok(HttpResponse::Created().body(""))
 }
