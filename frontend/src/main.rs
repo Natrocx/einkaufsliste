@@ -2,13 +2,14 @@ use std::error::Error;
 use std::fmt::Display;
 use std::process::exit;
 
-use bytes::{Buf, Bytes};
+use bytes::Buf;
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
+use einkaufsliste::model::shop::Shop;
 use reqwest::StatusCode;
-use rkyv::{AlignedVec, Infallible};
+use rkyv::AlignedVec;
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
@@ -54,7 +55,69 @@ async fn main() -> Result<(), reqwest::Error> {
   let list = get_flat_items_list(id).await.unwrap();
   println!("Number of items in list: {}", list.items.len());
 
+  println!("------------------ POST /shop ----------------");
+  let shop_id = store_shop(Shop {
+    id,
+    name: "LIDL".to_owned(),
+    image_id: None,
+  })
+  .await
+  .unwrap();
+  println!("New id: {:?}", shop_id);
+
+  println!("------------------ GET /shop/{{}} --------------");
+  let shop = get_shop(shop_id).await.unwrap();
+  println!("{}", shop.name);
+
+  println!("All tests successful.");
   Ok(())
+}
+
+pub(crate) async fn store_shop(shop: Shop) -> Result<u64, TransmissionError> {
+  const base_url: &str = "http://127.0.0.1:8080";
+  const uri: &str = "/shop";
+
+  let mut url = String::from(base_url);
+  url.push_str(uri);
+  let bytes = rkyv::to_bytes::<_, 128>(&shop).map_err(|_| TransmissionError::SerializationError)?;
+  let client = reqwest::Client::new();
+  let response = client
+    .post(url)
+    .body::<Vec<u8>>(bytes.into())
+    .send()
+    .await
+    .map_err(TransmissionError::NetworkError)?;
+
+  let mut new_id_bytes = response
+    .bytes()
+    .await
+    .map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+
+  // i hate this api...
+  if new_id_bytes.len() < 8 {
+    Err(TransmissionError::InvalidResponseError("Answer was too short.".into()))
+  } else {
+    Ok(new_id_bytes.get_u64())
+  }
+}
+
+pub(crate) async fn get_shop(id: u64) -> Result<Shop, TransmissionError> {
+  let response = reqwest::get(format!("http://127.0.0.1:8080/shop/{}", id))
+    .await
+    .map_err(TransmissionError::NetworkError)?;
+
+  let response_bytes = match response.status() {
+    StatusCode::OK => response.bytes().await.map_err(|_| TransmissionError::FailedRequest)?,
+    _ => return Err(TransmissionError::FailedRequest),
+  };
+
+  // the alignment is apparently lost along the way so we need to reallocate + realign (by copying)
+  let mut buffer = AlignedVec::with_capacity(response_bytes.len() - (response_bytes.len() % 64) + 64);
+  buffer.extend_from_slice(&response_bytes);
+
+  let shop = rkyv::from_bytes::<Shop>(&buffer).map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+
+  Ok(shop)
 }
 
 pub(crate) async fn push_new_item_list(list: List) -> Result<u64, TransmissionError> {

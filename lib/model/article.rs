@@ -1,4 +1,4 @@
-use rkyv::{Archive, Serialize, Deserialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]

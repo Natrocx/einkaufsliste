@@ -2,6 +2,7 @@ mod api;
 mod util;
 
 use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -53,13 +54,13 @@ pub struct DbState {
   list_db: sled::Tree,
 }
 
-fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::ServerConfig, &'static str> {
+fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::ServerConfig, TlsInitError> {
   // init server config builder with safe defaults
   let config = ServerConfig::builder().with_safe_defaults().with_no_client_auth();
 
   // load TLS key/cert files
-  let cert_file = &mut BufReader::new(File::open(cert_path).unwrap());
-  let key_file = &mut BufReader::new(File::open(key_path).unwrap());
+  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(|e| TlsInitError::ErrorReadingParameterPaths(e))?);
+  let key_file = &mut BufReader::new(File::open(key_path).map_err(|e| TlsInitError::ErrorReadingParameterPaths(e))?);
 
   // convert files to key/cert objects
   let cert_chain = rustls_pemfile::certs(cert_file)
@@ -82,4 +83,17 @@ fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::Serve
   }
 }
 
-enum TlsInitConfig {}
+enum TlsInitError {
+  ErrorReadingParameterPaths(std::io::Error),
+  ErrorBuildingChain(std::io::Error),
+}
+
+impl Display for TlsInitError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let error_message = match self {
+      Self::ErrorReadingParameterPaths(e) => format!("Could not access files at the provided path: {}", e),
+    };
+
+    write!(f, "{}", error_message)
+  }
+}
