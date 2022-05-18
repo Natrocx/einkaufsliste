@@ -1,9 +1,17 @@
 mod api;
 mod util;
 
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+
 use actix_web::web::{self};
 use actix_web::{middleware, HttpServer};
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
+use api::shop::{get_shop, store_shop};
+use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls_pemfile::pkcs8_private_keys;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -27,6 +35,8 @@ async fn main() -> std::io::Result<()> {
       .service(get_item_list_flat)
       .service(store_item_list)
       .service(store_item_attached)
+      .service(get_shop)
+      .service(store_shop)
       .wrap(middleware::Logger::default())
   })
   .bind(("127.0.0.1", 8080))?
@@ -42,3 +52,34 @@ pub struct DbState {
   shop_db: sled::Tree,
   list_db: sled::Tree,
 }
+
+fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::ServerConfig, &'static str> {
+  // init server config builder with safe defaults
+  let config = ServerConfig::builder().with_safe_defaults().with_no_client_auth();
+
+  // load TLS key/cert files
+  let cert_file = &mut BufReader::new(File::open(cert_path).unwrap());
+  let key_file = &mut BufReader::new(File::open(key_path).unwrap());
+
+  // convert files to key/cert objects
+  let cert_chain = rustls_pemfile::certs(cert_file)
+    .unwrap()
+    .into_iter()
+    .map(Certificate)
+    .collect();
+  let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
+    .unwrap()
+    .into_iter()
+    .map(PrivateKey)
+    .collect();
+
+  // exit if no keys could be parsed
+  if keys.is_empty() {
+    eprintln!("Could not locate PKCS 8 private keys.");
+    Err("Vier")
+  } else {
+    Ok(config.with_single_cert(cert_chain, keys.remove(0)).unwrap())
+  }
+}
+
+enum TlsInitConfig {}

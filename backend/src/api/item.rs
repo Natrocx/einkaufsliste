@@ -7,7 +7,6 @@ use einkaufsliste::model::article::ArchivedArticle;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
-
 use rkyv::AlignedVec;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
@@ -70,7 +69,6 @@ pub async fn store_item_attached(payload: Payload, state: web::Data<DbState>) ->
     )
     .map_err(ErrorInternalServerError)?;
 
-
   state
     .list_db
     .transaction(|tx_id| {
@@ -80,18 +78,18 @@ pub async fn store_item_attached(payload: Payload, state: web::Data<DbState>) ->
       };
       let mut old_list = match unsafe { rkyv::from_bytes_unchecked::<List>(&current_value) } {
         Ok(val) => val,
-        Err(_) => abort(ErrorInternalServerError(""))?,
+        Err(e) => abort(ErrorInternalServerError(e))?,
       };
       old_list.items.push(command.item.id);
 
       let bytes = match rkyv::to_bytes::<_, 256>(&old_list) {
         Ok(bytes) => bytes,
-        Err(e) => abort(ErrorInternalServerError(e))?
+        Err(e) => abort(ErrorInternalServerError(e))?,
       };
 
       match tx_id.insert(command.list_id.as_bytes(), bytes.as_bytes()) {
         Ok(_) => Ok(()),
-        Err(e) => abort(ErrorInternalServerError(e))
+        Err(e) => abort(ErrorInternalServerError(e)),
       }
     })
     .map_err(|e| match e {
@@ -100,7 +98,6 @@ pub async fn store_item_attached(payload: Payload, state: web::Data<DbState>) ->
       // if not, something else went wrong, so generic server error:
       _ => ErrorInternalServerError(e),
     })?;
-
 
   // update item List
   Ok(HttpResponse::Created().body(""))

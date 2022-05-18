@@ -6,7 +6,7 @@ edition = "2021"
 license = "AGPL-3.0"
 
 [dependencies]
-actix-web = { version = "4.0.1" }
+actix-web = { version = "4.0.1", features = ["rustls", "secure-cookies"] }
 bytecheck = "0.6.8"
 bytes = "1.1.0"
 env_logger = "0.9.0"
@@ -17,4 +17,6 @@ sled = "0.34.7"
 tokio = "1.18.2"
 zerocopy = "0.6.1"
 einkaufsliste = {path = "../" }
+rustls = "0.20.6"
+rustls-pemfile = "1.0.0"
 
