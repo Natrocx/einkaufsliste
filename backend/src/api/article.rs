@@ -49,17 +49,17 @@ async fn store_article(body: actix_web::web::Payload, data: web::Data<DbState>) 
   let params = collect_from_payload(body).await?;
   let buffer = params.as_bytes();
 
-  if buffer.len() < std::mem::size_of::<ArchivedArticle>() {
-    return Err(ErrorBadRequest("Incomplete data"));
-  }
-  let archived = match rkyv::check_archived_root::<Article>(buffer) {
-    Ok(val) => val,
-    Err(err) => return Err(actix_web::error::ErrorBadRequest(err.to_string())),
-  };
+  let mut archived = rkyv::from_bytes::<Article>(buffer).map_err(ErrorBadRequest)?;
+  archived.id = data.db.generate_id().map_err(ErrorInternalServerError)?;
   let db = &data.article_db;
 
-  db.insert::<&[u8], &[u8]>(archived.id.value().as_bytes(), buffer)
-    .map_err(|_| ErrorInternalServerError("Failure storing value"))?;
+  db.insert::<&[u8], &[u8]>(
+    archived.id.as_bytes(),
+    rkyv::to_bytes::<_, 384>(&archived)
+      .map_err(ErrorInternalServerError)?
+      .as_slice(),
+  )
+  .map_err(|_| ErrorInternalServerError("Failure storing value"))?;
 
   Ok(HttpResponse::Created().body(""))
 }

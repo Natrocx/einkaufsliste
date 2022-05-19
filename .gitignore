@@ -5,9 +5,10 @@
 /target
 /dist
 
-# TODO: sled db storage in local directory
+# ignore working files
 **/sled
 **/sled.db
+**/*.pem
 
 # Project-wide rustfmt settings (uncomment to change)
 # **/.rustfmt.toml

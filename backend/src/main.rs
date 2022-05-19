@@ -18,6 +18,8 @@ use rustls_pemfile::pkcs8_private_keys;
 async fn main() -> std::io::Result<()> {
   env_logger::init();
 
+  let config = load_rustls_config(Path::new("./cert.pem"), Path::new("./key.pem")).unwrap();
+
   let db = sled::open("./sled")?;
   let state = DbState {
     article_db: db.open_tree("article")?,
@@ -40,7 +42,7 @@ async fn main() -> std::io::Result<()> {
       .service(store_shop)
       .wrap(middleware::Logger::default())
   })
-  .bind(("127.0.0.1", 8080))?
+  .bind_rustls("127.0.0.1:8443", config)?
   .run()
   .await
 }
@@ -59,17 +61,17 @@ fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::Serve
   let config = ServerConfig::builder().with_safe_defaults().with_no_client_auth();
 
   // load TLS key/cert files
-  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(|e| TlsInitError::ErrorReadingParameterPaths(e))?);
-  let key_file = &mut BufReader::new(File::open(key_path).map_err(|e| TlsInitError::ErrorReadingParameterPaths(e))?);
+  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(|e| TlsInitError::ReadingParameterPaths(e))?);
+  let key_file = &mut BufReader::new(File::open(key_path).map_err(|e| TlsInitError::ReadingParameterPaths(e))?);
 
   // convert files to key/cert objects
   let cert_chain = rustls_pemfile::certs(cert_file)
-    .unwrap()
+    .map_err(|e| TlsInitError::BuildingChain(e))?
     .into_iter()
     .map(Certificate)
     .collect();
   let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
-    .unwrap()
+    .map_err(|e| TlsInitError::BuildingChain(e))?
     .into_iter()
     .map(PrivateKey)
     .collect();
@@ -77,21 +79,25 @@ fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::Serve
   // exit if no keys could be parsed
   if keys.is_empty() {
     eprintln!("Could not locate PKCS 8 private keys.");
-    Err("Vier")
+    Err(TlsInitError::MissingKeys)
   } else {
     Ok(config.with_single_cert(cert_chain, keys.remove(0)).unwrap())
   }
 }
 
+#[derive(Debug)]
 enum TlsInitError {
-  ErrorReadingParameterPaths(std::io::Error),
-  ErrorBuildingChain(std::io::Error),
+  ReadingParameterPaths(std::io::Error),
+  BuildingChain(std::io::Error),
+  MissingKeys,
 }
 
 impl Display for TlsInitError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let error_message = match self {
-      Self::ErrorReadingParameterPaths(e) => format!("Could not access files at the provided path: {}", e),
+      Self::ReadingParameterPaths(e) => format!("Could not access files at the provided path: {}", e),
+      TlsInitError::BuildingChain(e) => format!("An Error occurred while building Keychain: {}", e),
+      TlsInitError::MissingKeys => "Missing PEM files".to_owned(),
     };
 
     write!(f, "{}", error_message)
