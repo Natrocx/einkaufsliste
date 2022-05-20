@@ -1,6 +1,6 @@
-use std::fmt::{format, Display};
+use std::fmt::{Display};
 use std::fs::File;
-use std::io::{BufReader, ErrorKind, Read};
+use std::io::{BufReader, Read};
 use std::path::Path;
 
 use bytes::Buf;

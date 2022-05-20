@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 
-use einkaufsliste::model::{item::Item, requests::StoreItemAttached, shop::Shop, list::List};
+use einkaufsliste::model::{item::Item, list::List, requests::StoreItemAttached, shop::Shop};
 
 use crate::service::api::APIService;
 

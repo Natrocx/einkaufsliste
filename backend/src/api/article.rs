@@ -1,26 +1,11 @@
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
-use actix_web::web::{self};
+use actix_web::web;
 use actix_web::{get, post, Error, HttpResponse, Result};
-use einkaufsliste::model::article::{ArchivedArticle, Article};
+use einkaufsliste::model::article::Article;
 use zerocopy::AsBytes;
 
 use crate::util::collect_from_payload;
 use crate::DbState;
-
-#[get("/article/test")]
-pub(crate) async fn get_example_article(state: web::Data<DbState>) -> Result<HttpResponse, Error> {
-  let article = Article {
-    id: state.db.generate_id().unwrap(),
-    name: "name".to_owned(),
-    description: Some("description is present".to_owned()),
-    image_id: None,
-    shops: None,
-  };
-
-  let encoded = rkyv::to_bytes::<_, 384>(&article).unwrap();
-
-  Ok(HttpResponse::Ok().body(encoded.as_bytes().to_owned()))
-}
 
 #[get("/article/{id}")]
 async fn get_article_by_id(id: actix_web::web::Path<String>, state: web::Data<DbState>) -> Result<HttpResponse, Error> {

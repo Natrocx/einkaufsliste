@@ -1,7 +1,7 @@
 mod api;
 mod util;
 
-use std::error::Error;
+
 use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
@@ -31,7 +31,6 @@ async fn main() -> std::io::Result<()> {
   HttpServer::new(move || {
     actix_web::App::new()
       .app_data(web::Data::new(state.clone()))
-      .service(crate::api::article::get_example_article)
       .service(crate::api::article::store_article)
       .service(crate::api::article::get_article_by_id)
       .service(crate::api::item::get_item_by_id)
@@ -61,17 +60,17 @@ fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::Serve
   let config = ServerConfig::builder().with_safe_defaults().with_no_client_auth();
 
   // load TLS key/cert files
-  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(|e| TlsInitError::ReadingParameterPaths(e))?);
-  let key_file = &mut BufReader::new(File::open(key_path).map_err(|e| TlsInitError::ReadingParameterPaths(e))?);
+  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(TlsInitError::ReadingParameterPaths)?);
+  let key_file = &mut BufReader::new(File::open(key_path).map_err(TlsInitError::ReadingParameterPaths)?);
 
   // convert files to key/cert objects
   let cert_chain = rustls_pemfile::certs(cert_file)
-    .map_err(|e| TlsInitError::BuildingChain(e))?
+    .map_err(TlsInitError::BuildingChain)?
     .into_iter()
     .map(Certificate)
     .collect();
   let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
-    .map_err(|e| TlsInitError::BuildingChain(e))?
+    .map_err(TlsInitError::BuildingChain)?
     .into_iter()
     .map(PrivateKey)
     .collect();
