@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{format, Display};
 use std::fs::File;
 use std::io::{BufReader, ErrorKind, Read};
 use std::path::Path;
@@ -15,58 +15,65 @@ use crate::TransmissionError;
 
 #[derive(Debug)]
 pub enum APIServiceInitializationError {
-  ErrorReadingFile(std::io::Error),
-  ErrorParsingCertificate,
-  ErrorBuildingClient,
+  ReadingFile(std::io::Error),
+  ParsingCertificate,
+  BuildingClient,
 }
 
 impl Display for APIServiceInitializationError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let error_message = match self {
-      APIServiceInitializationError::ErrorReadingFile(e) => format!("Error reading certificate file: {}", e),
-      APIServiceInitializationError::ErrorParsingCertificate => "Error parsing certificate data".to_owned(),
-      APIServiceInitializationError::ErrorBuildingClient => "Error building reqwest client".to_owned(),
+      APIServiceInitializationError::ReadingFile(e) => format!("Error reading certificate file: {}", e),
+      APIServiceInitializationError::ParsingCertificate => "Error parsing certificate data".to_owned(),
+      APIServiceInitializationError::BuildingClient => "Error building reqwest client".to_owned(),
     };
 
     write!(f, "{}", error_message)
   }
 }
-
 pub struct APIService<'a> {
   http_client: Mutex<Client>,
   base_url: &'a str,
-  base_url_index: usize,
 }
 
 impl<'a> APIService<'a> {
   pub fn new(base_url: &'a str, cert_path: &Path) -> Result<APIService<'a>, APIServiceInitializationError> {
     let mut buffer = Vec::new();
-    BufReader::new(File::open(cert_path).map_err(APIServiceInitializationError::ErrorReadingFile)?)
+    BufReader::new(File::open(cert_path).map_err(APIServiceInitializationError::ReadingFile)?)
       .read_to_end(&mut buffer)
-      .map_err(APIServiceInitializationError::ErrorReadingFile)?;
+      .map_err(APIServiceInitializationError::ReadingFile)?;
 
     let client = reqwest::ClientBuilder::new()
       .https_only(true)
       .min_tls_version(tls::Version::TLS_1_2)
       .add_root_certificate(
-        Certificate::from_pem(&buffer).map_err(|_| APIServiceInitializationError::ErrorParsingCertificate)?,
+        Certificate::from_pem(&buffer).map_err(|_| APIServiceInitializationError::ParsingCertificate)?,
       )
       .build()
-      .map_err(|_| APIServiceInitializationError::ErrorBuildingClient)?;
+      .map_err(|_| APIServiceInitializationError::BuildingClient)?;
 
     Ok(APIService {
       http_client: Mutex::new(client),
       base_url,
-      base_url_index: base_url.len(),
     })
   }
 
-  pub(crate) async fn store_shop(&self, shop: Shop) -> Result<u64, TransmissionError> {
-    // TODO: evaluate thread-local scratcb space
+  // TODO: evaluate ThreadLocal storage for url
+  fn build_url(&self, uri: &str) -> String {
     let mut url = String::with_capacity(256);
-    const URI: &str = "/shop";
     url.push_str(self.base_url);
-    url.push_str(URI);
+    url.push_str(uri);
+
+    url
+  }
+
+  /// builds a url from base, uri and id. the [uri] does not require a trailing /
+  fn build_url_with_id(&self, uri: &str, id: u64) -> String {
+    format!("{}{}/{}", self.base_url, uri, id)
+  }
+
+  pub(crate) async fn store_shop(&self, shop: Shop) -> Result<u64, TransmissionError> {
+    let url = self.build_url("/shop");
 
     let bytes = rkyv::to_bytes::<_, 128>(&shop).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
@@ -93,10 +100,7 @@ impl<'a> APIService<'a> {
   }
 
   pub(crate) async fn get_shop(&self, id: u64) -> Result<Shop, TransmissionError> {
-    let mut url = String::with_capacity(256);
-    url.push_str(self.base_url);
-    url.push_str("/shop/");
-    url.push_str(&id.to_string());
+    let url = self.build_url_with_id("/shop", id);
 
     let response = self
       .http_client
@@ -121,16 +125,11 @@ impl<'a> APIService<'a> {
     Ok(shop)
   }
 
-  pub(crate) async fn push_new_item_list(list: List) -> Result<u64, TransmissionError> {
-    const base_url: &str = "http://127.0.0.1:8080";
-    const uri: &str = "/itemList";
-
-    let mut url = String::from(base_url);
-    url.push_str(uri);
+  pub(crate) async fn push_new_item_list(&self, list: List) -> Result<u64, TransmissionError> {
     let bytes = rkyv::to_bytes::<_, 1024>(&list).map_err(|_| TransmissionError::SerializationError)?;
     let client = reqwest::Client::new();
     let response = client
-      .post(url)
+      .post(self.build_url("/itemList"))
       .body::<Vec<u8>>(bytes.into())
       .send()
       .await
@@ -149,8 +148,8 @@ impl<'a> APIService<'a> {
     }
   }
 
-  pub(crate) async fn get_flat_items_list(id: u64) -> Result<FlatItemsList, TransmissionError> {
-    let response = reqwest::get(format!("http://127.0.0.1:8080/itemList/{}/flat", id))
+  pub(crate) async fn get_flat_items_list(&self, id: u64) -> Result<FlatItemsList, TransmissionError> {
+    let response = reqwest::get(format!("{}/itemList/{}/flat", self.base_url, id))
       .await
       .map_err(TransmissionError::NetworkError)?;
 
@@ -169,12 +168,9 @@ impl<'a> APIService<'a> {
     Ok(item_list)
   }
 
-  async fn push_item_attached(command: StoreItemAttached) -> Result<(), TransmissionError> {
-    const base_url: &str = "http://127.0.0.1:8080";
-    const uri: &str = "/item/attached";
+  pub(crate) async fn push_item_attached(&self, command: StoreItemAttached) -> Result<(), TransmissionError> {
+    let url = self.build_url("/item/attached");
 
-    let mut url = String::from(base_url);
-    url.push_str(uri);
     let bytes = rkyv::to_bytes::<_, 128>(&command).map_err(|_| TransmissionError::SerializationError)?;
     let client = reqwest::Client::new();
     let response = client

@@ -4,47 +4,44 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 
-use einkaufsliste::model::shop::Shop;
+use einkaufsliste::model::{item::Item, requests::StoreItemAttached, shop::Shop, list::List};
 
-use crate::service::backend::APIService;
+use crate::service::api::APIService;
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
   let api_service = APIService::new("https://localhost:8443", Path::new("./cert.pem")).unwrap();
 
-  /*
-  println!("------------- GET /article/test ---------------");
-  let article = get_example_article().await?;
-  println!("{}", article.description.unwrap());
-
   println!("-------------- POST /itemList ----------------------");
-  let id = push_new_item_list(List {
-    id: 0,
-    name: "Vierfünf".to_owned(),
-    shop: 0,
-    image_id: None,
-    items: vec![],
-  })
-  .await
-  .unwrap();
+  let id = api_service
+    .push_new_item_list(List {
+      id: 0,
+      name: "Vierfünf".to_owned(),
+      shop: 0,
+      image_id: None,
+      items: vec![],
+    })
+    .await
+    .unwrap();
   println!("id returned: {}", id);
 
   println!("------------------ GET /itemList/{{}}/flat --------------");
-  let list = get_flat_items_list(id).await.unwrap();
+  let list = api_service.get_flat_items_list(id).await.unwrap();
   println!("Number of items in list: {}", list.items.len());
 
   println!("--------------- POST /item/attached -----------------");
   println!(
     "{}",
-    match push_item_attached(StoreItemAttached {
-      item: Item {
-        id: 0,
-        article_id: None,
-        alternative_article_ids: None,
-      },
-      list_id: id,
-    })
-    .await
+    match api_service
+      .push_item_attached(StoreItemAttached {
+        item: Item {
+          id: 0,
+          article_id: None,
+          alternative_article_ids: None,
+        },
+        list_id: id,
+      })
+      .await
     {
       Ok(_) => "Success!",
       Err(_) => "Failure!",
@@ -52,9 +49,8 @@ async fn main() -> Result<(), reqwest::Error> {
   );
 
   println!("------------------ GET /itemList/{{}}/flat --------------");
-  let list = get_flat_items_list(id).await.unwrap();
+  let list = api_service.get_flat_items_list(id).await.unwrap();
   println!("Number of items in list: {}", list.items.len());
-  */
 
   println!("------------------ POST /shop ----------------");
   let shop_id = api_service
@@ -74,6 +70,7 @@ async fn main() -> Result<(), reqwest::Error> {
   println!("All tests successful.");
   Ok(())
 }
+
 #[derive(Debug)]
 enum TransmissionError {
   SerializationError,
