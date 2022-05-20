@@ -9,7 +9,11 @@ license = "AGPL-3.0"
 [dependencies]
 bytecheck = "0.6.8"
 log = "0.4.17"
-rkyv = { version = "0.7.38", features = ["bytecheck", "validation", "rend", "archive_be"] }
+rkyv = { version = "0.7.38", features = [
+  "bytecheck",
+  "validation",
+  "archive_be",
+] }
 sled = "0.34.7"
 
 [workspace]

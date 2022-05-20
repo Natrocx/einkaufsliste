@@ -12,11 +12,14 @@ bytes = "1.1.0"
 env_logger = "0.9.0"
 futures = "0.3.21"
 log = "0.4.17"
-rkyv = { version = "0.7.38", features = ["bytecheck", "validation", "rend", "archive_be"] }
+rkyv = { version = "0.7.38", features = [
+  "bytecheck",
+  "validation",
+  "archive_be",
+] }
 sled = "0.34.7"
 tokio = "1.18.2"
 zerocopy = "0.6.1"
-einkaufsliste = {path = "../" }
+einkaufsliste = { path = "../" }
 rustls = "0.20.6"
 rustls-pemfile = "1.0.0"
-
