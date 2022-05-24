@@ -1,11 +1,13 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
+use super::shop::Shop;
+use super::Identifiable;
 
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct List {
-  pub id: u64,
+  pub id: <List as Identifiable>::Id,
   pub name: String,
   pub shop: u64,
   pub image_id: Option<u32>,
@@ -15,9 +17,9 @@ pub struct List {
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
-  pub id: u64,
+  pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to be the same
   pub name: String,
-  pub shop: u64,
+  pub shop: <Shop as Identifiable>::Id,
   pub image_id: Option<u32>,
   pub items: Vec<Item>,
 }
@@ -32,4 +34,8 @@ impl FlatItemsList {
       items: vec,
     }
   }
+}
+
+impl Identifiable for List {
+  type Id = u64;
 }
