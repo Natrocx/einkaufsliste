@@ -1,15 +1,16 @@
-use std::fmt::{Display};
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 
 use bytes::Buf;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::StoreItemAttached;
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
-use reqwest::{tls, Certificate, Client, StatusCode};
+use futures::lock::Mutex;
+use futures::TryFutureExt;
+use reqwest::{Client, StatusCode};
 use rkyv::AlignedVec;
-use tokio::sync::Mutex;
 
 use crate::TransmissionError;
 
@@ -37,18 +38,10 @@ pub struct APIService<'a> {
 }
 
 impl<'a> APIService<'a> {
-  pub fn new(base_url: &'a str, cert_path: &Path) -> Result<APIService<'a>, APIServiceInitializationError> {
-    let mut buffer = Vec::new();
-    BufReader::new(File::open(cert_path).map_err(APIServiceInitializationError::ReadingFile)?)
-      .read_to_end(&mut buffer)
-      .map_err(APIServiceInitializationError::ReadingFile)?;
-
+  pub fn new(base_url: &'a str) -> Result<APIService<'a>, APIServiceInitializationError> {
     let client = reqwest::ClientBuilder::new()
+      .cookie_store(true)
       .https_only(true)
-      .min_tls_version(tls::Version::TLS_1_2)
-      .add_root_certificate(
-        Certificate::from_pem(&buffer).map_err(|_| APIServiceInitializationError::ParsingCertificate)?,
-      )
       .build()
       .map_err(|_| APIServiceInitializationError::BuildingClient)?;
 
@@ -127,9 +120,12 @@ impl<'a> APIService<'a> {
 
   pub(crate) async fn push_new_item_list(&self, list: List) -> Result<u64, TransmissionError> {
     let bytes = rkyv::to_bytes::<_, 1024>(&list).map_err(|_| TransmissionError::SerializationError)?;
-    let client = reqwest::Client::new();
-    let response = client
+    let response = self
+      .http_client
+      .lock()
+      .await
       .post(self.build_url("/itemList"))
+      .fetch_mode_no_cors()
       .body::<Vec<u8>>(bytes.into())
       .send()
       .await
@@ -149,7 +145,12 @@ impl<'a> APIService<'a> {
   }
 
   pub(crate) async fn get_flat_items_list(&self, id: u64) -> Result<FlatItemsList, TransmissionError> {
-    let response = reqwest::get(format!("{}/itemList/{}/flat", self.base_url, id))
+    let response = self
+      .http_client
+      .lock()
+      .await
+      .get(format!("{}/itemList/{}/flat", self.base_url, id))
+      .send()
       .await
       .map_err(TransmissionError::NetworkError)?;
 
@@ -172,8 +173,10 @@ impl<'a> APIService<'a> {
     let url = self.build_url("/item/attached");
 
     let bytes = rkyv::to_bytes::<_, 128>(&command).map_err(|_| TransmissionError::SerializationError)?;
-    let client = reqwest::Client::new();
-    let response = client
+    let response = self
+      .http_client
+      .lock()
+      .await
       .post(url)
       .body::<Vec<u8>>(bytes.into())
       .send()
@@ -182,6 +185,58 @@ impl<'a> APIService<'a> {
 
     match response.status() {
       StatusCode::CREATED => Ok(()),
+      _ => Err(TransmissionError::FailedRequest),
+    }
+  }
+
+  pub(crate) async fn register_v1(&self, command: RegisterUserV1) -> Result<u64, TransmissionError> {
+    let url = self.build_url("/register/v1");
+
+    let bytes = rkyv::to_bytes::<_, 128>(&command).map_err(|_| TransmissionError::SerializationError)?;
+    let response = self
+      .http_client
+      .lock()
+      .await
+      .post(url)
+      .body(bytes.to_vec())
+      .send()
+      .await
+      .map_err(TransmissionError::NetworkError)?;
+    let status = response.status();
+
+    let mut id_bytes = response
+      .bytes()
+      .await
+      .map_err(|e| TransmissionError::InvalidResponseError(Box::new(e)))?;
+
+    match status {
+      StatusCode::CREATED => {
+        if id_bytes.len() < 8 {
+          Err(TransmissionError::FailedRequest)
+        } else {
+          Ok(id_bytes.get_u64())
+        }
+      }
+      _ => Err(TransmissionError::FailedRequest),
+    }
+  }
+
+  pub(crate) async fn login_v1(&self, command: &LoginUserV1) -> Result<(), TransmissionError> {
+    let url = self.build_url("/login/v1");
+
+    let bytes = rkyv::to_bytes::<_, 128>(command).map_err(|_| TransmissionError::SerializationError)?;
+    let response = self
+      .http_client
+      .lock()
+      .await
+      .post(url)
+      .body(bytes.to_vec())
+      .send()
+      .await
+      .map_err(TransmissionError::NetworkError)?;
+
+    match response.status() {
+      StatusCode::OK => Ok(()),
       _ => Err(TransmissionError::FailedRequest),
     }
   }

@@ -1,25 +1,34 @@
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
+use actix_identity::Identity;
+use actix_session::Session;
+use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
 use actix_web::web::{
   Payload, {self},
 };
 use actix_web::{get, post, Error, HttpResponse, Result};
-use einkaufsliste::model::article::ArchivedArticle;
+use einkaufsliste::model::article::{ArchivedArticle, Article};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
+use einkaufsliste::model::user::User;
 use rkyv::AlignedVec;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
+use crate::api::{new_generic_acl, preprocess_payload};
 use crate::util::{self, collect_from_payload};
-use crate::DbState;
+use crate::{DbState, SessionState};
 
 #[get("/item/{id}")]
 pub async fn get_item_by_id(
   id: web::Path<String>,
   state: web::Data<DbState>,
+  sessions: web::Data<SessionState>,
+  identity: Identity,
 ) -> actix_web::Result<HttpResponse, actix_web::Error> {
+  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
   let idx = id.parse::<u64>().map_err(|_| ErrorBadRequest("Invalid id"))?;
+
+  state.verify_access::<Item, User>(idx, user_id)?;
 
   let db = &state.item_db;
   let data = db
@@ -32,36 +41,46 @@ pub async fn get_item_by_id(
   Ok(HttpResponse::Ok().body(data))
 }
 
+//TODO: remove?
 #[post("/item")]
-pub async fn store_item_unattached(payload: Payload, state: web::Data<DbState>) -> Result<HttpResponse, Error> {
-  let db = &state.item_db;
-  let body = util::collect_from_payload(payload).await.map_err(ErrorBadRequest)?;
-
-  //TODO extract method
-  let mut aligned_bytes = AlignedVec::with_capacity(body.len() + 64);
-  aligned_bytes.extend_from_slice(&body);
+pub async fn store_item_unattached(
+  payload: Payload,
+  state: web::Data<DbState>,
+  sessions: web::Data<SessionState>,
+  identity: Identity,
+) -> Result<HttpResponse, Error> {
+  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+  let aligned_bytes = preprocess_payload::<256>(payload).await?;
 
   let item = rkyv::from_bytes::<Item>(&aligned_bytes).map_err(ErrorBadRequest)?;
-  db.insert(item.id.as_bytes(), aligned_bytes.as_slice())
+  state
+    .item_db
+    .insert(item.id.as_bytes(), aligned_bytes.as_slice())
     .map_err(ErrorInternalServerError)?;
+
+  new_generic_acl::<Article, User>(item.id, user_id, &state.acl_db)?;
 
   Ok(HttpResponse::Created().body(""))
 }
 
 #[post("/item/attached")]
-pub async fn store_item_attached(payload: Payload, state: web::Data<DbState>) -> Result<HttpResponse, Error> {
-  let body = util::collect_from_payload(payload).await.map_err(ErrorBadRequest)?;
-
-  //TODO extract method
-  let mut aligned_bytes = AlignedVec::with_capacity(body.len() + 64);
-  aligned_bytes.extend_from_slice(&body);
+pub async fn store_item_attached(
+  payload: Payload,
+  state: web::Data<DbState>,
+  sessions: web::Data<SessionState>,
+  identity: Identity,
+) -> Result<HttpResponse, Error> {
+  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+  let aligned_bytes = preprocess_payload::<128>(payload).await?;
 
   let command = rkyv::from_bytes::<StoreItemAttached>(&aligned_bytes).map_err(ErrorBadRequest)?;
+
+  state.verify_access::<List, User>(command.list_id, user_id)?;
 
   // insert item
   state
     .item_db
-    .insert::<&[u8], &[u8]>(
+    .insert(
       command.item.id.as_bytes(),
       rkyv::to_bytes::<_, 128>(&command.item)
         .map_err(ErrorBadRequest)?
@@ -99,15 +118,28 @@ pub async fn store_item_attached(payload: Payload, state: web::Data<DbState>) ->
       _ => ErrorInternalServerError(e),
     })?;
 
+  // ensure that we can get items independent of their corresponding list
+  state.copy_acl::<List, Item>(command.list_id, command.item.id)?;
+
   // update item List
   Ok(HttpResponse::Created().body(""))
 }
 
 #[get("/itemList/{id}/flat")]
-pub async fn get_item_list_flat(id: web::Path<String>, state: web::Data<DbState>) -> Result<HttpResponse, Error> {
-  let db = &state.list_db;
-  let list_bytes = db
-    .get(id.parse::<u64>().map_err(ErrorBadRequest)?.as_bytes())
+pub async fn get_item_list_flat(
+  id: web::Path<String>,
+  state: web::Data<DbState>,
+  sessions: web::Data<SessionState>,
+  identity: Identity,
+) -> Result<HttpResponse, Error> {
+  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+  let list_id = id.parse::<u64>().map_err(ErrorBadRequest)?;
+
+  state.verify_access::<List, User>(list_id, user_id)?;
+
+  let list_bytes = state
+    .list_db
+    .get(list_id.as_bytes())
     .map_err(ErrorInternalServerError)?
     .ok_or_else(|| ErrorNotFound("No such item list."))?;
   let list = unsafe {
@@ -143,14 +175,16 @@ pub async fn get_item_list_flat(id: web::Path<String>, state: web::Data<DbState>
 }
 
 #[post("/itemList")]
-pub(crate) async fn store_item_list(payload: Payload, state: web::Data<DbState>) -> Result<HttpResponse, Error> {
+pub(crate) async fn store_item_list(
+  payload: Payload,
+  state: web::Data<DbState>,
+  sessions: web::Data<SessionState>,
+  identity: Identity,
+) -> Result<HttpResponse, Error> {
+  let user_id = sessions.get_id_for_identity(identity)?;
+
   let params = collect_from_payload(payload).await?;
   let db = &state.list_db;
-
-  // sanitize input
-  if params.as_bytes().len() < std::mem::size_of::<ArchivedArticle>() {
-    return Err(ErrorBadRequest("Incomplete data."));
-  }
 
   // while an id is provided with the archived data, we do not use this id, given, that the client does not know the new id as this is DB-managed information
   let id = state.db.generate_id().map_err(ErrorInternalServerError)?;
@@ -164,6 +198,8 @@ pub(crate) async fn store_item_list(payload: Payload, state: web::Data<DbState>)
       .as_bytes(),
   )
   .map_err(ErrorInternalServerError)?;
+
+  new_generic_acl::<List, User>(id, user_id, &state.acl_db)?;
 
   // we need to return the newly generated id to the client
   Ok(HttpResponse::Created().body(id.as_bytes().to_owned()))

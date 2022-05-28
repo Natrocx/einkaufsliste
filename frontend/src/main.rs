@@ -2,22 +2,74 @@ pub mod service;
 
 use std::error::Error;
 use std::fmt::Display;
-use std::path::Path;
+use std::sync::Arc;
 
-use einkaufsliste::model::{item::Item, list::List, requests::StoreItemAttached, shop::Shop};
+use einkaufsliste::model::item::{Item, Unit};
+use einkaufsliste::model::list::List;
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
+use einkaufsliste::model::shop::Shop;
 
 use crate::service::api::APIService;
 
 #[tokio::main]
-async fn main() -> Result<(), reqwest::Error> {
-  let api_service = APIService::new("https://localhost:8443", Path::new("./cert.pem")).unwrap();
+pub async fn main() {
+  let api_service = APIService::new("https://localhost:8443").unwrap();
+
+  test_requests(Arc::new(api_service)).await.unwrap();
+
+  print!("All tests successful");
+}
+
+async fn test_requests(api_service: Arc<APIService<'_>>) -> Result<(), reqwest::Error> {
+  println!("-------------- unauthenticated POST /itemList -------------");
+  api_service
+    .push_new_item_list(List {
+      id: 0,
+      name: "vier".to_owned(),
+      shop: None,
+      image_id: None,
+      items: vec![],
+    })
+    .await
+    .unwrap_err();
+  println!("Failed successfully!");
+
+  println!("-------------- POST /register/v1 -------------------");
+  let user_id = api_service
+    .register_v1(RegisterUserV1 {
+      name: "test_user".to_owned(),
+      password: "EinPasswortMit8Zeichen".to_owned(),
+    })
+    .await
+    .unwrap();
+  println!("New user id: {user_id}");
+
+  println!("-------------- POST /login/v1 ----------------------");
+  api_service
+    .login_v1(&LoginUserV1 {
+      id: user_id,
+      password: "EinPasswortMit8Zeichen".to_string(),
+    })
+    .await
+    .unwrap();
+  println!("Successful login");
+
+  println!("-------------- POST /login/v1 with incorrect credentials ----------");
+  api_service
+    .login_v1(&LoginUserV1 {
+      id: user_id,
+      password: "EinPasswortMit8ZeichenUndFehler".to_string(),
+    })
+    .await
+    .unwrap_err();
+  println!("Successfully failed login");
 
   println!("-------------- POST /itemList ----------------------");
   let id = api_service
     .push_new_item_list(List {
       id: 0,
       name: "Vierfünf".to_owned(),
-      shop: 0,
+      shop: None,
       image_id: None,
       items: vec![],
     })
@@ -36,8 +88,11 @@ async fn main() -> Result<(), reqwest::Error> {
       .push_item_attached(StoreItemAttached {
         item: Item {
           id: 0,
+          checked: false,
           article_id: None,
           alternative_article_ids: None,
+          amount: Some(1),
+          unit: Some(Unit::KiloGram)
         },
         list_id: id,
       })
@@ -50,7 +105,11 @@ async fn main() -> Result<(), reqwest::Error> {
 
   println!("------------------ GET /itemList/{{}}/flat --------------");
   let list = api_service.get_flat_items_list(id).await.unwrap();
-  println!("Number of items in list: {}", list.items.len());
+  println!(
+    "Number of items in list: {}, with total size: {}",
+    list.items.len(),
+    std::mem::size_of_val(&list)
+  );
 
   println!("------------------ POST /shop ----------------");
   let shop_id = api_service
@@ -66,8 +125,6 @@ async fn main() -> Result<(), reqwest::Error> {
   println!("------------------ GET /shop/{{}} --------------");
   let shop = api_service.get_shop(shop_id).await.unwrap();
   println!("{}", shop.name);
-
-  println!("All tests successful.");
   Ok(())
 }
 

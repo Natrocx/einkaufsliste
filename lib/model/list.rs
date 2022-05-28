@@ -9,7 +9,7 @@ use super::Identifiable;
 pub struct List {
   pub id: <List as Identifiable>::Id,
   pub name: String,
-  pub shop: u64,
+  pub shop: Option<u64>,
   pub image_id: Option<u32>,
   pub items: Vec<u64>,
 }
@@ -19,7 +19,7 @@ pub struct List {
 pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to be the same
   pub name: String,
-  pub shop: <Shop as Identifiable>::Id,
+  pub shop: Option<<Shop as Identifiable>::Id>,
   pub image_id: Option<u32>,
   pub items: Vec<Item>,
 }

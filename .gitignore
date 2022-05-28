@@ -2,12 +2,12 @@
 /test
 
 # Standard rust:
-/target
-/dist
+**/target
+**/dist
 
 # ignore working files
-**/sled
-**/sled.db
+**/data.sled
+**/sessions.sled
 **/*.pem
 
 # Project-wide rustfmt settings (uncomment to change)

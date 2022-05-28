@@ -9,12 +9,14 @@ license = "AGPL-3.0"
 [dependencies]
 bytecheck = "0.6.8"
 log = "0.4.17"
+reqwest = { version = "0.11.10", features = ["cookies"] }
 rkyv = { version = "0.7.38", features = [
   "bytecheck",
   "validation",
   "archive_be",
 ] }
 sled = "0.34.7"
+zerocopy = "0.6.1"
 
 [workspace]
 members = ["frontend", "backend"]
