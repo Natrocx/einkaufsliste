@@ -5,7 +5,8 @@ use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::User;
 use zerocopy::AsBytes;
 
-use crate::{DbState, SessionState, api::new_generic_acl};
+use crate::api::new_generic_acl;
+use crate::{DbState, SessionState};
 
 #[get("/shop/{id}")]
 pub async fn get_shop(

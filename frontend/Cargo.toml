@@ -7,13 +7,16 @@ edition = "2021"
 license = "AGPL-3.0"
 
 [dependencies]
-reqwest = { version = "^0.11", features = [
+reqwest = { version = "0.11.10", default-features = false, features = [
   "rustls-tls",
   "brotli",
+  "cookie_crate",
+  "cookie_store",
 ] } # we use rustls because FUCK YOU OPENSSL FUCK YOU FUCK YOU LINKER ERROR
-rkyv = { version = "^0.7", features = ["archive_be"] }
-tokio = { version = "1", features = ["full"] }
+rkyv = { version = "0.7.38", features = ["archive_be"] }
 einkaufsliste = { path = "../" }
-bytes = "1"
-zerocopy = "^0.6"
+bytes = "1.1.0"
+zerocopy = "0.6.1"
 futures = "0.3.21"
+yew = "0.19.3"
+web-sys = { version = "0.3.57", features = ["Element", "HtmlElement"] }

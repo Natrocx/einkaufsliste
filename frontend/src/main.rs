@@ -1,4 +1,8 @@
+#![feature(generic_associated_types)]
+#![feature(async_closure)]
+
 pub mod service;
+pub mod ui;
 
 use std::error::Error;
 use std::fmt::Display;
@@ -8,11 +12,16 @@ use einkaufsliste::model::item::{Item, Unit};
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
+use ui::list::{ListItemProperties, ListItemView};
+use ui::App;
 
 use crate::service::api::APIService;
 
-#[tokio::main]
-pub async fn main() {
+fn main() {
+  yew::start_app::<App>();
+}
+
+async fn old_main() {
   let api_service = APIService::new("https://localhost:8443").unwrap();
 
   test_requests(Arc::new(api_service)).await.unwrap();
@@ -20,7 +29,7 @@ pub async fn main() {
   print!("All tests successful");
 }
 
-async fn test_requests(api_service: Arc<APIService<'_>>) -> Result<(), reqwest::Error> {
+async fn test_requests(api_service: Arc<APIService>) -> Result<(), reqwest::Error> {
   println!("-------------- unauthenticated POST /itemList -------------");
   api_service
     .push_new_item_list(List {
@@ -88,6 +97,7 @@ async fn test_requests(api_service: Arc<APIService<'_>>) -> Result<(), reqwest::
       .push_item_attached(StoreItemAttached {
         item: Item {
           id: 0,
+          name: "Test".to_owned(),
           checked: false,
           article_id: None,
           alternative_article_ids: None,
@@ -129,7 +139,7 @@ async fn test_requests(api_service: Arc<APIService<'_>>) -> Result<(), reqwest::
 }
 
 #[derive(Debug)]
-enum TransmissionError {
+pub enum TransmissionError {
   SerializationError,
   NetworkError(reqwest::Error),
   InvalidResponseError(Box<dyn Error>),

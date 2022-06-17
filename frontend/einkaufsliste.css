@@ -1,0 +1,70 @@
+/* ------------------ List Item -----------------*/
+/* li refers to the application-specific list item, not the html tag */
+.li-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start safe;
+
+  gap: 0.5em;
+}
+
+.li-checkbox {
+  display: inline-flex;
+  flex-shrink: 10;
+}
+
+.li-name-container {
+  display: inline-flex;
+  flex-grow: 1;
+}
+
+.li-name {
+  flex-grow: 1;
+}
+
+.li-unit-container {
+  flex-shrink: 1;
+}
+
+.li-amount {
+  width: 3em;
+  /* flex does not seem to want to change this input so we set it statically */
+}
+
+.inactive {
+  display: none;
+}
+
+.dropdown {
+  display: block;
+  position: relative;
+}
+
+.dropdown-content {
+  display: flex;
+  flex-direction: column;
+  width: min-content;
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  padding: 5px;
+  border: 1px solid #999999;
+  border-radius: 3px;
+}
+
+.dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+}
+
+.button {
+  height: 1.8em;
+  /* TODO: ??? */
+}
+
+.input {
+  height: 1.6em;
+}

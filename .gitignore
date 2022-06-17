@@ -10,6 +10,8 @@
 **/sessions.sled
 **/*.pem
 
+frontend/bower_components/**
+
 # Project-wide rustfmt settings (uncomment to change)
 # **/.rustfmt.toml
 # **/rustfmt.toml
