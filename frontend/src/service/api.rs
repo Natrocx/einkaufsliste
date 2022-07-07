@@ -8,6 +8,8 @@ use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
+use einkaufsliste::model::user::User;
+use einkaufsliste::model::Identifiable;
 use futures::lock::Mutex;
 use futures::TryFutureExt;
 use reqwest::{Client, StatusCode};
@@ -84,7 +86,7 @@ impl APIService {
     let mut new_id_bytes = response
       .bytes()
       .await
-      .map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+      .map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     // i hate this api...
     if new_id_bytes.len() < 8 {
@@ -115,7 +117,7 @@ impl APIService {
     let mut buffer = AlignedVec::with_capacity(response_bytes.len() - (response_bytes.len() % 64) + 64);
     buffer.extend_from_slice(&response_bytes);
 
-    let shop = rkyv::from_bytes::<Shop>(&buffer).map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+    let shop = rkyv::from_bytes::<Shop>(&buffer).map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     Ok(shop)
   }
@@ -136,7 +138,7 @@ impl APIService {
     let mut new_id_bytes = response
       .bytes()
       .await
-      .map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+      .map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     // i hate this api...
     if new_id_bytes.len() < 8 {
@@ -166,7 +168,7 @@ impl APIService {
     buffer.extend_from_slice(&response_bytes);
 
     let item_list =
-      rkyv::from_bytes::<FlatItemsList>(&buffer).map_err(|e| TransmissionError::InvalidResponseError(e.into()))?;
+      rkyv::from_bytes::<FlatItemsList>(&buffer).map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     Ok(item_list)
   }
@@ -191,10 +193,10 @@ impl APIService {
     }
   }
 
-  pub(crate) async fn register_v1(&self, command: RegisterUserV1) -> Result<u64, TransmissionError> {
+  pub(crate) async fn register_v1(&self, command: &RegisterUserV1) -> Result<u64, TransmissionError> {
     let url = self.build_url("/register/v1");
 
-    let bytes = rkyv::to_bytes::<_, 128>(&command).map_err(|_| TransmissionError::SerializationError)?;
+    let bytes = rkyv::to_bytes::<_, 128>(command).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
       .lock()
@@ -209,7 +211,7 @@ impl APIService {
     let mut id_bytes = response
       .bytes()
       .await
-      .map_err(|e| TransmissionError::InvalidResponseError(Box::new(e)))?;
+      .map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     match status {
       StatusCode::CREATED => {
@@ -223,7 +225,7 @@ impl APIService {
     }
   }
 
-  pub async fn login_v1(&self, command: &LoginUserV1) -> Result<(), TransmissionError> {
+  pub async fn login_v1(&self, command: &LoginUserV1) -> Result<<User as Identifiable>::Id, TransmissionError> {
     let url = self.build_url("/login/v1");
 
     let bytes = rkyv::to_bytes::<_, 128>(command).map_err(|_| TransmissionError::SerializationError)?;
@@ -238,7 +240,17 @@ impl APIService {
       .map_err(TransmissionError::NetworkError)?;
 
     match response.status() {
-      StatusCode::OK => Ok(()),
+      StatusCode::OK => {
+        let mut response_bytes = response.bytes().await.unwrap();
+        if response_bytes.len() < 8 {
+          // todo move to Identifiable trait?
+          Ok(response_bytes.get_u64())
+        } else {
+          Err(TransmissionError::InvalidResponseError(
+            "Incomplete response.".to_string(),
+          ))
+        }
+      }
       _ => Err(TransmissionError::FailedRequest),
     }
   }

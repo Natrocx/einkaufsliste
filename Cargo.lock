@@ -20,6 +20,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-cors"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "414360eed71ba2d5435b185ba43ecbe281dfab5df3898286d6b7be8074372c92"
+dependencies = [
+ "actix-utils",
+ "actix-web",
+ "derive_more",
+ "futures-util",
+ "log",
+ "once_cell",
+ "smallvec",
+]
+
+[[package]]
 name = "actix-http"
 version = "3.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -183,9 +198,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web"
-version = "4.0.1"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4e5ebffd51d50df56a3ae0de0e59487340ca456f05dd0b90c0a7a6dd6a74d31"
+checksum = "a27e8fe9ba4ae613c21f677c2cfaf0696c3744030c6f485b34634e502d6bb379"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -373,6 +388,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "backend"
 version = "0.1.0"
 dependencies = [
+ "actix-cors",
  "actix-identity",
  "actix-session",
  "actix-web",
@@ -541,6 +557,17 @@ checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
 dependencies = [
  "cfg-if",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "console_log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "501a375961cef1a0d44767200e66e4a559283097e91d0730b1d75dfb2f8a1494"
+dependencies = [
+ "log",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -717,6 +744,7 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 name = "einkaufsliste"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "bytecheck",
  "log",
  "reqwest",
@@ -1035,6 +1063,8 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fb7d06c1c8cc2a29bee7ec961009a0b2caa0793ee4900c2ffb348734ba1c8f9"
 dependencies = [
+ "futures-channel",
+ "futures-core",
  "js-sys",
  "wasm-bindgen",
 ]
@@ -1280,12 +1310,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 
 [[package]]
-name = "libm"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
-
-[[package]]
 name = "local-channel"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1462,16 +1486,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "packed_simd_2"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defdcfef86dcc44ad208f71d9ff4ce28df6537a4e0d6b0e8e845cb8ca10059a6"
-dependencies = [
- "cfg-if",
- "libm",
 ]
 
 [[package]]
@@ -1663,7 +1677,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
- "packed_simd_2",
  "rand_chacha",
  "rand_core",
 ]
@@ -1803,9 +1816,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.7.38"
+version = "0.7.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "517a3034eb2b1499714e9d1e49b2367ad567e07639b69776d35e259d9c27cca6"
+checksum = "cec2b3485b07d96ddfd3134767b8a447b45ea4eb91448d0a35180ec0ffd5ed15"
 dependencies = [
  "bytecheck",
  "hashbrown 0.12.1",
@@ -1817,9 +1830,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.7.38"
+version = "0.7.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "505c209ee04111a006431abf39696e640838364d67a107c559ababaf6fd8c9dd"
+checksum = "6eaedadc88b53e36dd32d940ed21ae4d850d5916f2581526921f553a72ac34c4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2586,8 +2599,11 @@ name = "web_frontend"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "console_log",
  "einkaufsliste",
  "futures",
+ "gloo-timers",
+ "log",
  "reqwest",
  "rkyv",
  "web-sys",

@@ -1,4 +1,4 @@
-#![feature(generic_associated_types)]
+//#![feature(generic_associated_types)]
 #![feature(async_closure)]
 
 pub mod service;
@@ -12,12 +12,13 @@ use einkaufsliste::model::item::{Item, Unit};
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
-use ui::list::{ListItemProperties, ListItemView};
+use log::Level;
 use ui::App;
 
 use crate::service::api::APIService;
 
 fn main() {
+  console_log::init_with_level(Level::Debug);
   yew::start_app::<App>();
 }
 
@@ -45,7 +46,7 @@ async fn test_requests(api_service: Arc<APIService>) -> Result<(), reqwest::Erro
 
   println!("-------------- POST /register/v1 -------------------");
   let user_id = api_service
-    .register_v1(RegisterUserV1 {
+    .register_v1(&RegisterUserV1 {
       name: "test_user".to_owned(),
       password: "EinPasswortMit8Zeichen".to_owned(),
     })
@@ -56,7 +57,7 @@ async fn test_requests(api_service: Arc<APIService>) -> Result<(), reqwest::Erro
   println!("-------------- POST /login/v1 ----------------------");
   api_service
     .login_v1(&LoginUserV1 {
-      id: user_id,
+      name: "test_user".to_string(),
       password: "EinPasswortMit8Zeichen".to_string(),
     })
     .await
@@ -66,7 +67,7 @@ async fn test_requests(api_service: Arc<APIService>) -> Result<(), reqwest::Erro
   println!("-------------- POST /login/v1 with incorrect credentials ----------");
   api_service
     .login_v1(&LoginUserV1 {
-      id: user_id,
+      name: "test_user".to_string(),
       password: "EinPasswortMit8ZeichenUndFehler".to_string(),
     })
     .await
@@ -142,7 +143,7 @@ async fn test_requests(api_service: Arc<APIService>) -> Result<(), reqwest::Erro
 pub enum TransmissionError {
   SerializationError,
   NetworkError(reqwest::Error),
-  InvalidResponseError(Box<dyn Error>),
+  InvalidResponseError(String),
   FailedRequest,
 }
 

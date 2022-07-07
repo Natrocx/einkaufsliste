@@ -12,11 +12,14 @@ reqwest = { version = "0.11.10", default-features = false, features = [
   "brotli",
   "cookie_crate",
   "cookie_store",
-] } # we use rustls because FUCK YOU OPENSSL FUCK YOU FUCK YOU LINKER ERROR
+] } # we use rustls because openssl doesn't do wasm
 rkyv = { version = "0.7.38", features = ["archive_be"] }
 einkaufsliste = { path = "../" }
 bytes = "1.1.0"
 zerocopy = "0.6.1"
 futures = "0.3.21"
 yew = "0.19.3"
-web-sys = { version = "0.3.57", features = ["Element", "HtmlElement"] }
+web-sys = { version = "0.3.57", features = ["Element", "HtmlElement", "Node", "DomTokenList", "Window", "HtmlDivElement"] }
+log = "0.4.17"
+console_log = { version = "0.2.0", features = ["color"] }
+gloo-timers = { version = "0.2.4", features = ["futures"] }

@@ -20,6 +20,6 @@ pub struct RegisterUserV1 {
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct LoginUserV1 {
-  pub id: u64,
+  pub name: String,
   pub password: String,
 }

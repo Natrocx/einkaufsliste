@@ -2,7 +2,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct User {
   pub id: <Self as Identifiable>::Id,
@@ -10,14 +10,14 @@ pub struct User {
   pub profile_picture_id: Option<u64>,
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct UserWithPassword {
   pub user: User,
   pub password: Password,
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Password {
   pub hash: Vec<u8>,

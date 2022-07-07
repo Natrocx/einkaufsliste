@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use super::article::Article;
 use super::Identifiable;
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))] //rkyv validation
 pub struct Item {
   pub id: <Item as Identifiable>::Id,
@@ -15,7 +15,7 @@ pub struct Item {
   pub alternative_article_ids: Option<Vec<<Article as Identifiable>::Id>>,
 }
 
-#[derive(PartialEq, Archive, Serialize, Deserialize)]
+#[derive(PartialEq, Archive, Serialize, Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
   Gram,

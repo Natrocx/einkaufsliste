@@ -4,20 +4,20 @@ use super::item::Item;
 use super::shop::Shop;
 use super::Identifiable;
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, PartialEq)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct List {
   pub id: <List as Identifiable>::Id,
   pub name: String,
-  pub shop: Option<u64>,
+  pub shop: Option<<Shop as Identifiable>::Id>,
   pub image_id: Option<u32>,
-  pub items: Vec<u64>,
+  pub items: Vec<<Item as Identifiable>::Id>,
 }
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
-  pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to be the same
+  pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type
   pub name: String,
   pub shop: Option<<Shop as Identifiable>::Id>,
   pub image_id: Option<u32>,

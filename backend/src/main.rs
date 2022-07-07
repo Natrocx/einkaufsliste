@@ -1,3 +1,4 @@
+#![feature(generic_arg_infer)]
 mod api;
 mod middleware;
 mod util;
@@ -37,6 +38,7 @@ async fn main() -> std::io::Result<()> {
     list_db: db.open_tree("list")?,
     acl_db: db.open_tree("list_acl")?,
     user_db: db.open_tree("user")?,
+    login_db: db.open_tree("login")?,
     db,
     rng: Arc::new(Mutex::new(rand_xoshiro::Xoshiro256PlusPlus::from_entropy())),
   };
@@ -50,6 +52,8 @@ async fn main() -> std::io::Result<()> {
   let cookie_priv_key = rand::thread_rng().gen::<[u8; 32]>();
 
   HttpServer::new(move || {
+    let cors_config = actix_cors::Cors::permissive();
+
     actix_web::App::new()
       .app_data(web::Data::new(application_state.clone()))
       .app_data(web::Data::new(session_state.clone()))
@@ -63,6 +67,7 @@ async fn main() -> std::io::Result<()> {
       .service(store_shop)
       .service(register_v1)
       .service(login_v1)
+      .wrap(cors_config)
       .wrap(actix_web::middleware::Logger::default())
       .wrap(IdentityService::new(
         CookieIdentityPolicy::new(&cookie_priv_key)
@@ -87,6 +92,7 @@ pub struct DbState {
   list_db: sled::Tree,
   acl_db: sled::Tree,
   user_db: sled::Tree,
+  login_db: sled::Tree,
   // TODO: consider moving to threadlocal
   rng: Arc<Mutex<rand_xoshiro::Xoshiro256PlusPlus>>, /* rng for salts: there is no need for the salt to be securely generated as even a normal random number prevents rainbow-table attacks */
 }

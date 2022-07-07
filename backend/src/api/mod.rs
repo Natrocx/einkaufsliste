@@ -54,6 +54,7 @@ impl DbState {
     let mut hasher = blake3::Hasher::new();
     hasher.update(password.as_bytes());
     hasher.update(&salt);
+
     Password {
       hash: hasher.finalize().as_bytes().to_vec(),
       salt: salt.to_vec(),

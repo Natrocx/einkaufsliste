@@ -5,6 +5,8 @@ use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::*;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{User, UserWithPassword};
+use einkaufsliste::model::Identifiable;
+use log::debug;
 use zerocopy::AsBytes;
 
 use super::hash_password_with_salt;
@@ -22,8 +24,17 @@ pub(crate) async fn register_v1(
 
   let parameter = rkyv::from_bytes::<RegisterUserV1>(&bytes).map_err(ErrorBadRequest)?;
 
+  // validate registration request
   if parameter.password.len() < 8 {
     return Err(ErrorBadRequest("Password is too short"));
+  }
+  if data
+    .login_db
+    .get(&parameter.name)
+    .map_err(ErrorInternalServerError)?
+    .is_some()
+  {
+    return Err(ErrorBadRequest("A user with this name exists already"));
   }
 
   let hashed_pw = data.hash_password(&parameter.password).await;
@@ -32,7 +43,7 @@ pub(crate) async fn register_v1(
   let value = rkyv::to_bytes::<_, 256>(&UserWithPassword {
     user: User {
       id,
-      name: parameter.name,
+      name: parameter.name.clone(),
       profile_picture_id: None,
     },
     password: hashed_pw,
@@ -42,6 +53,10 @@ pub(crate) async fn register_v1(
   data
     .user_db
     .insert(id.as_bytes(), value.as_bytes())
+    .map_err(ErrorInternalServerError)?;
+  data
+    .login_db
+    .insert(&parameter.name, value.as_bytes())
     .map_err(ErrorInternalServerError)?;
 
   let cookie_secret = sessions
@@ -65,7 +80,7 @@ pub(crate) async fn login_v1(
 
   let login_request = rkyv::from_bytes::<LoginUserV1>(&bytes).map_err(ErrorBadRequest)?;
 
-  let valid_password = match check_password(&login_request, &state.user_db) {
+  let id = match check_password(&login_request, &state.login_db) {
     Ok(valid) => valid,
     Err(e) => match e {
       PasswordValidationError::DbAccessError(e) => return Err(ErrorInternalServerError(e)),
@@ -74,29 +89,26 @@ pub(crate) async fn login_v1(
         log::error!("Unexpected error interpreting database bytes");
         return Err(ErrorInternalServerError(""));
       }
+      PasswordValidationError::InvalidPassword => return Err(ErrorBadRequest("Invalid Password")),
     },
   };
 
   let cookie_secret = sessions
-    .insert_new_session_for_id(login_request.id)
+    .insert_new_session_for_id(id)
     .map_err(ErrorInternalServerError)?;
-
   identity.remember(cookie_secret);
 
-  if valid_password {
-    // set cookie via actix_identity
-    identity.remember(login_request.id.to_string());
-    Ok(HttpResponse::Ok().body(""))
-  } else {
-    Err(ErrorBadRequest("Incorrect password"))
-  }
+  Ok(HttpResponse::Ok().body(""))
 }
 
-fn check_password<'a>(login: &'a LoginUserV1, user_db: &'a sled::Tree) -> Result<bool, PasswordValidationError> {
+fn check_password<'a>(
+  login: &'a LoginUserV1,
+  user_db: &'a sled::Tree,
+) -> Result<<User as Identifiable>::Id, PasswordValidationError> {
   let stored_user = user_db
-    .get(login.id.as_bytes())
+    .get(&login.name)
     .map_err(PasswordValidationError::DbAccessError)?
-    .ok_or(PasswordValidationError::NoSuchUserError)?;
+    .ok_or_else(|| PasswordValidationError::NoSuchUserError)?;
 
   let user = unsafe {
     rkyv::from_bytes_unchecked::<UserWithPassword>(&stored_user)
@@ -104,7 +116,16 @@ fn check_password<'a>(login: &'a LoginUserV1, user_db: &'a sled::Tree) -> Result
   };
 
   let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
-  Ok(request_pw_hash.eq(&user.password.hash))
+
+  if request_pw_hash == &*user.password.hash {
+    Ok(user.user.id)
+  } else {
+    debug!(
+      "Password validation error: {}, {}: {:?}, {:?}",
+      login.name, login.password, request_pw_hash, user.password.hash
+    );
+    Err(PasswordValidationError::InvalidPassword)
+  }
 }
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
@@ -113,6 +134,7 @@ enum PasswordValidationError {
   DbAccessError(sled::Error),
   NoSuchUserError,
   RkyvValidationError,
+  InvalidPassword,
 }
 
 impl Display for PasswordValidationError {
@@ -123,6 +145,7 @@ impl Display for PasswordValidationError {
       PasswordValidationError::RkyvValidationError => {
         "An unexpected error occured when deserialising from db.".to_owned()
       }
+      PasswordValidationError::InvalidPassword => "Invalid password".to_owned(),
     };
 
     write!(f, "{}", error_message)
