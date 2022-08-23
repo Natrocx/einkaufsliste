@@ -29,3 +29,5 @@ actix-session = { version = "0.6.2", features = ["cookie-session"] }
 actix-identity = "0.4.0"
 rand_xoshiro = "0.6.0"
 actix-cors = "0.6.1"
+mimalloc = { version = "*", default-features = false }
+num = "0.4.0"

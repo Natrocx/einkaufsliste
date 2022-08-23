@@ -8,7 +8,7 @@ use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
-use einkaufsliste::model::user::User;
+use einkaufsliste::model::user::{ObjectList, User};
 use einkaufsliste::model::Identifiable;
 use futures::lock::Mutex;
 use futures::TryFutureExt;
@@ -273,5 +273,15 @@ impl APIService {
       StatusCode::OK => Ok(()),
       _ => Err(TransmissionError::FailedRequest),
     }
+  }
+
+  pub async fn get_users_lists(&self, user: &User) -> Result<ObjectList, TransmissionError> {
+    let url = format!("{}/users/lists", self.base_url);
+
+    let response = self.http_client.lock().await.get(&url).send().await?;
+
+    let lists = rkyv::from_bytes::<ObjectList>(response.bytes().await?.as_bytes())?;
+
+    Ok(lists)
   }
 }

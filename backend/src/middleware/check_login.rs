@@ -44,7 +44,7 @@ where
 
   type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-  fn call(&self, req: ServiceRequest) -> Self::Future {
+  fn call(&self, _req: ServiceRequest) -> Self::Future {
     todo!()
   }
 

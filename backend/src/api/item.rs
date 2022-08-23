@@ -1,21 +1,28 @@
+
+
+
+
 use actix_identity::Identity;
-use actix_session::Session;
+
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
 use actix_web::web::{
   Payload, {self},
 };
 use actix_web::{get, post, Error, HttpResponse, Result};
-use einkaufsliste::model::article::{ArchivedArticle, Article};
+
+use einkaufsliste::model::article::{Article};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
-use einkaufsliste::model::user::User;
-use rkyv::AlignedVec;
+use einkaufsliste::model::user::{User};
+
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
 use crate::api::{new_generic_acl, preprocess_payload};
-use crate::util::{self, collect_from_payload};
+
+
+use crate::util::{collect_from_payload};
 use crate::{DbState, SessionState};
 
 #[get("/item/{id}")]
@@ -181,7 +188,7 @@ pub(crate) async fn store_item_list(
   sessions: web::Data<SessionState>,
   identity: Identity,
 ) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_identity(identity)?;
+  let user_id = sessions.get_id_for_identity(&identity)?;
 
   let params = collect_from_payload(payload).await?;
   let db = &state.list_db;

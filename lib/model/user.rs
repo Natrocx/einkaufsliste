@@ -1,3 +1,5 @@
+
+
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
@@ -27,3 +29,12 @@ pub struct Password {
 impl Identifiable for User {
   type Id = u64;
 }
+
+#[derive(Archive, Serialize, Deserialize, Debug)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct ObjectList {
+  pub typ: u64,
+  pub list: Vec<u64>,
+}
+
+

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CMakePresetLoader">{
+  &quot;useNewFormat&quot;: true
+}</component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
+  <component name="CargoProjects">
+    <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="50f912bb-0251-4ce4-9c87-802ed5c61303" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/einkaufsliste.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/einkaufsliste.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/api/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/api/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/api/user.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/api/user.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/einkaufsliste.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/einkaufsliste.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/service/api.rs" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/service/api.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/ui/list.rs" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/ui/list.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/ui/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/ui/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/model/item.rs" beforeDir="false" afterPath="$PROJECT_DIR$/lib/model/item.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/model/list.rs" beforeDir="false" afterPath="$PROJECT_DIR$/lib/model/list.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/model/requests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/lib/model/requests.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lib/model/user.rs" beforeDir="false" afterPath="$PROJECT_DIR$/lib/model/user.rs" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="y169eynv" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="293oznXwb8bMNKJGwCp4gNFpkZV" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Project.color&quot;: &quot;2f2358&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/natrocx/projects/einkaufsliste&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;language.rust&quot;
+  }
+}</component>
+  <component name="RustProjectSettings">
+    <option name="externalLinter" value="Clippy" />
+    <option name="runExternalLinterOnTheFly" value="true" />
+    <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+    <option name="version" value="2" />
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="50f912bb-0251-4ce4-9c87-802ed5c61303" name="Changes" comment="" />
+      <created>1652351394162</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1652351394162</updated>
+      <workItem from="1652351395239" duration="363000" />
+      <workItem from="1652351765382" duration="2290000" />
+      <workItem from="1655812644516" duration="259000" />
+      <workItem from="1655812913239" duration="2896000" />
+      <workItem from="1655973843705" duration="166000" />
+      <workItem from="1655974020901" duration="4214000" />
+      <workItem from="1656232654404" duration="925000" />
+      <workItem from="1656237170396" duration="33000" />
+      <workItem from="1656237208325" duration="129000" />
+      <workItem from="1656237405448" duration="3361000" />
+      <workItem from="1656257435533" duration="158000" />
+      <workItem from="1656670315053" duration="89000" />
+      <workItem from="1657103541879" duration="108000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>

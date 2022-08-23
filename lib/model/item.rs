@@ -15,7 +15,7 @@ pub struct Item {
   pub alternative_article_ids: Option<Vec<<Article as Identifiable>::Id>>,
 }
 
-#[derive(PartialEq, Archive, Serialize, Deserialize, Clone)]
+#[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
   Gram,

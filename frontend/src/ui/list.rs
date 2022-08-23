@@ -156,7 +156,7 @@ impl Component for ListItemView {
   fn destroy(&mut self, ctx: &Context<Self>) {}
 }
 
-#[derive(Properties)]
+#[derive(Properties, Clone)]
 pub struct ListProperties {
   pub(crate) api_service: Arc<APIService>,
   pub(crate) id: <List as Identifiable>::Id,

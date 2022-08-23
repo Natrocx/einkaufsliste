@@ -15,7 +15,7 @@ pub async fn get_shop(
   sessions: web::Data<SessionState>,
   identity: Identity,
 ) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_identity(identity)?;
+  let user_id = sessions.get_id_for_identity(&identity)?;
   let shop_id = id.parse::<u64>().map_err(ErrorBadRequest)?;
 
   state.verify_access::<Shop, User>(shop_id, user_id)?;
@@ -38,7 +38,7 @@ pub async fn store_shop(
   sessions: web::Data<SessionState>,
   identity: Identity,
 ) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_identity(identity)?;
+  let user_id = sessions.get_id_for_identity(&identity)?;
   let shop_db = &state.shop_db;
 
   let kek = crate::util::collect_from_payload(payload)

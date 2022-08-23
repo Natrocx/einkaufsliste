@@ -1,10 +1,10 @@
-use actix_identity::Identity;
-use actix_web::error::{self, ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorUnauthorized};
+
+use actix_web::error::{self, ErrorBadRequest, ErrorForbidden, ErrorInternalServerError};
 use actix_web::{web, Error};
 use einkaufsliste::model::user::Password;
 use einkaufsliste::model::{AccessControlList, Identifiable};
-use rand::distributions::Standard;
-use rand::{Rng, SeedableRng};
+
+use rand::{Rng};
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::serializers::AllocSerializer;
 use rkyv::{AlignedVec, Deserialize, Serialize};
@@ -12,7 +12,7 @@ use sled::Tree;
 use zerocopy::AsBytes;
 
 use crate::util::collect_from_payload;
-use crate::{DbState, SessionState};
+use crate::{DbState};
 
 pub(crate) mod article;
 pub(crate) mod item;

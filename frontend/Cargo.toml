@@ -19,7 +19,18 @@ bytes = "1.1.0"
 zerocopy = "0.6.1"
 futures = "0.3.21"
 yew = "0.19.3"
-web-sys = { version = "0.3.57", features = ["Element", "HtmlElement", "Node", "DomTokenList", "Window", "HtmlDivElement"] }
+web-sys = { version = "0.3.57", features = [
+  "Element",
+  "HtmlElement",
+  "Node",
+  "DomTokenList",
+  "Window",
+  "HtmlDivElement",
+] }
 log = "0.4.17"
 console_log = { version = "0.2.0", features = ["color"] }
 gloo-timers = { version = "0.2.4", features = ["futures"] }
+yew-router = "0.16.0"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
