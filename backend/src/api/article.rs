@@ -1,14 +1,15 @@
 use actix_identity::Identity;
-use actix_web::error::{ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorUnauthorized};
+use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
 use actix_web::web::Payload;
-use actix_web::{get, post, put, web, Error, HttpResponse, Result};
+use actix_web::{get, post, put, web, Result};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::{AccessControlList, Identifiable};
 use zerocopy::AsBytes;
 
 use crate::api::{new_generic_acl, preprocess_payload, store_in_db};
-use crate::util::collect_from_payload;
+use crate::response::{Response, ResponseError};
+
 use crate::{DbState, SessionState};
 
 #[get("/article/{id}")]
@@ -17,28 +18,18 @@ async fn get_article_by_id(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   let article_id = id
     .as_ref()
     .parse::<u64>()
-    .map_err(|_| actix_web::error::ErrorBadRequest("Invalid id"))?;
+    .map_err(|_| ResponseError::ErrorBadRequest)?;
 
   // check if the user has access:
   check_article_acl(article_id, &state, &sessions, identity)?;
 
-  let value = state
+  state
     .article_db
-    .get(article_id.as_bytes())
-    .map_err(|_| actix_web::error::ErrorNotFound("No such article"))?;
-
-  // we assume that the data is fine, since we validated it before storing
-  let data = match value {
-    Some(vec) => vec,
-    None => return Err(actix_web::error::ErrorNotFound("No such article")),
-  }
-  .as_bytes()
-  .to_owned();
-  Ok(HttpResponse::Ok().body(data))
+    .get(article_id.as_bytes()).into()
 }
 
 #[put("/article")]
@@ -47,17 +38,17 @@ async fn update_article(
   data: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   let bytes = preprocess_payload::<384>(body).await?;
 
-  let article = rkyv::from_bytes::<Article>(&bytes).map_err(ErrorBadRequest)?;
+  let article = rkyv::from_bytes::<Article>(&bytes).map_err(|_| ResponseError::ErrorBadRequest)?;
 
   // before submitting parsed article to db we check the permissions:
   check_article_acl(article.id, &data, &sessions, identity)?;
 
   store_in_db::<Article, 384>(article.id, article, &data.article_db)?;
 
-  Ok(HttpResponse::Ok().body("body"))
+  Response::empty()
 }
 
 #[post("/article")]
@@ -66,36 +57,30 @@ async fn store_article(
   data: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   // the only security check done here is login, since the id is generated and no data can be overwritten/read
   sessions.confirm_user_login(&identity)?;
 
-  let params = collect_from_payload(body).await?;
-  let buffer = params.as_bytes();
+let bytes = preprocess_payload::<256>(body).await?;
 
   let user_id = sessions
-    .get_id_for_session(identity.identity().ok_or_else(|| ErrorBadRequest("Not logged in."))?)
-    .map_err(ErrorInternalServerError)?;
+    .get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
 
-  // TODO: move conversion to Identifiable trait?
-  let user_id = u64::from_be_bytes(user_id.as_bytes().try_into().map_err(ErrorInternalServerError)?);
-
-  let mut archived = rkyv::from_bytes::<Article>(buffer).map_err(ErrorBadRequest)?;
-  archived.id = data.db.generate_id().map_err(ErrorInternalServerError)?;
+  let mut archived = rkyv::from_bytes::<Article>(&bytes).map_err(|_| ResponseError::ErrorBadRequest)?;
+  archived.id = data.db.generate_id()?;
   let db = &data.article_db;
 
   db.insert::<&[u8], &[u8]>(
     archived.id.as_bytes(),
-    rkyv::to_bytes::<_, 384>(&archived)
-      .map_err(ErrorInternalServerError)?
+    rkyv::to_bytes::<_, 384>(&archived)?
       .as_slice(),
-  )
-  .map_err(|_| ErrorInternalServerError("Failure storing value"))?;
+  )?;
 
   // since this is a new object we need to create an acl for this
   new_generic_acl::<Article, User>(archived.id, user_id, &data.article_db)?;
 
-  Ok(HttpResponse::Created().body(""))
+Response::empty()
+
 }
 
 fn check_article_acl(
@@ -103,10 +88,10 @@ fn check_article_acl(
   state: &DbState,
   sessions: &SessionState,
   identity: Identity,
-) -> Result<(), Error> {
-  let user_id = match identity.identity() {
-    Some(session_id) => sessions.get_id_for_session(session_id)?,
-    None => return Err(ErrorUnauthorized("")),
+) -> Result<(), ResponseError> {
+  let user_id = match identity.id() {
+    Ok(session_id) => sessions.get_id_for_session(session_id)?,
+    Err(_) => return Err(ResponseError::ErrorUnauthenticated),
   };
 
   let acl = rkyv::from_bytes::<AccessControlList<Article, User>>(
@@ -122,7 +107,7 @@ fn check_article_acl(
   if acl.owner == user_id || acl.allowed_user_ids.contains(&user_id) {
     Ok(())
   } else {
-    Err(ErrorForbidden(""))
+    Err(ResponseError::ErrorUnauthorized)
   }
 }
 

@@ -1,28 +1,20 @@
-
-
-
-
 use actix_identity::Identity;
-
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
+use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
 use actix_web::web::{
   Payload, {self},
 };
-use actix_web::{get, post, Error, HttpResponse, Result};
-
-use einkaufsliste::model::article::{Article};
+use actix_web::{get, post};
+use einkaufsliste::model::article::Article;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
-use einkaufsliste::model::user::{User};
-
+use einkaufsliste::model::user::User;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
 use crate::api::{new_generic_acl, preprocess_payload};
-
-
-use crate::util::{collect_from_payload};
+use crate::response::{Response, ResponseError};
+use crate::util::collect_from_payload;
 use crate::{DbState, SessionState};
 
 #[get("/item/{id}")]
@@ -31,21 +23,14 @@ pub async fn get_item_by_id(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> actix_web::Result<HttpResponse, actix_web::Error> {
-  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
-  let idx = id.parse::<u64>().map_err(|_| ErrorBadRequest("Invalid id"))?;
+) -> Response {
+  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
+  let idx = id.parse::<u64>().map_err(|_| ResponseError::ErrorBadRequest)?;
 
   state.verify_access::<Item, User>(idx, user_id)?;
 
   let db = &state.item_db;
-  let data = db
-    .get(idx.as_bytes())
-    .map_err(|_| ErrorInternalServerError("Error accessing database."))?
-    .ok_or_else(|| ErrorNotFound(""))?
-    .as_bytes()
-    .to_owned();
-
-  Ok(HttpResponse::Ok().body(data))
+  db.get(idx.as_bytes()).into()
 }
 
 //TODO: remove?
@@ -55,19 +40,18 @@ pub async fn store_item_unattached(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+) -> Response {
+  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
   let aligned_bytes = preprocess_payload::<256>(payload).await?;
 
   let item = rkyv::from_bytes::<Item>(&aligned_bytes).map_err(ErrorBadRequest)?;
   state
     .item_db
-    .insert(item.id.as_bytes(), aligned_bytes.as_slice())
-    .map_err(ErrorInternalServerError)?;
+    .insert(item.id.as_bytes(), aligned_bytes.as_slice())?;
 
   new_generic_acl::<Article, User>(item.id, user_id, &state.acl_db)?;
 
-  Ok(HttpResponse::Created().body(""))
+  Response::empty()
 }
 
 #[post("/item/attached")]
@@ -76,11 +60,11 @@ pub async fn store_item_attached(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+) -> Response {
+  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
   let aligned_bytes = preprocess_payload::<128>(payload).await?;
 
-  let command = rkyv::from_bytes::<StoreItemAttached>(&aligned_bytes).map_err(ErrorBadRequest)?;
+  let command = rkyv::from_bytes::<StoreItemAttached>(&aligned_bytes).map_err(|_| ResponseError::ErrorBadRequest)?;
 
   state.verify_access::<List, User>(command.list_id, user_id)?;
 
@@ -90,11 +74,11 @@ pub async fn store_item_attached(
     .insert(
       command.item.id.as_bytes(),
       rkyv::to_bytes::<_, 128>(&command.item)
-        .map_err(ErrorBadRequest)?
+        .map_err(|_| ResponseError::ErrorBadRequest)?
         .as_slice(),
-    )
-    .map_err(ErrorInternalServerError)?;
+    )?;
 
+    // TODO: migrate Errors
   state
     .list_db
     .transaction(|tx_id| {
@@ -129,7 +113,7 @@ pub async fn store_item_attached(
   state.copy_acl::<List, Item>(command.list_id, command.item.id)?;
 
   // update item List
-  Ok(HttpResponse::Created().body(""))
+    Response::empty()
 }
 
 #[get("/itemList/{id}/flat")]
@@ -138,24 +122,22 @@ pub async fn get_item_list_flat(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
-  let user_id = sessions.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)?;
+) -> Response {
+  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
   let list_id = id.parse::<u64>().map_err(ErrorBadRequest)?;
 
   state.verify_access::<List, User>(list_id, user_id)?;
 
   let list_bytes = state
     .list_db
-    .get(list_id.as_bytes())
-    .map_err(ErrorInternalServerError)?
-    .ok_or_else(|| ErrorNotFound("No such item list."))?;
+    .get(list_id.as_bytes())?
+    .ok_or(ResponseError::ErrorNotFound)?;
+
   let list = unsafe {
     // This should be safe, as objects are checked before they are inserted into the db
-    rkyv::from_bytes_unchecked::<List>(list_bytes.as_bytes())
-  }
-  .map_err(ErrorInternalServerError)?;
+    rkyv::from_bytes_unchecked::<List>(list_bytes.as_bytes())?
+  };
 
-  //let vec = Vec::with_capacity(list.items.len());
   let item_db = &state.item_db;
   let mut building_success = true;
   let vec = list
@@ -174,11 +156,7 @@ pub async fn get_item_list_flat(
 
   let flat_items_list = FlatItemsList::from_list_and_items(list, vec);
 
-  let bytes = rkyv::to_bytes::<_, 256>(&flat_items_list)
-    .map_err(ErrorInternalServerError)?
-    .to_vec();
-
-  Ok(HttpResponse::Ok().body(bytes))
+  rkyv::to_bytes::<_, 256>(&flat_items_list)?.into()
 }
 
 #[post("/itemList")]
@@ -187,27 +165,22 @@ pub(crate) async fn store_item_list(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   let user_id = sessions.get_id_for_identity(&identity)?;
 
   let params = collect_from_payload(payload).await?;
   let db = &state.list_db;
 
   // while an id is provided with the archived data, we do not use this id, given, that the client does not know the new id as this is DB-managed information
-  let id = state.db.generate_id().map_err(ErrorInternalServerError)?;
+  let id = state.db.generate_id()?;
   // check archive; TODO: don't deserialize?
-  let mut archived = rkyv::from_bytes::<List>(params.as_bytes()).map_err(ErrorBadRequest)?;
+  let mut archived = rkyv::from_bytes::<List>(params.as_bytes()).map_err(|_| ResponseError::ErrorBadRequest)?;
+
   archived.id = id;
-  db.insert(
-    id.as_bytes(),
-    rkyv::to_bytes::<_, 64>(&archived)
-      .map_err(ErrorInternalServerError)?
-      .as_bytes(),
-  )
-  .map_err(ErrorInternalServerError)?;
+  db.insert(id.as_bytes(), rkyv::to_bytes::<_, 64>(&archived)?.as_bytes())?;
 
   new_generic_acl::<List, User>(id, user_id, &state.acl_db)?;
 
   // we need to return the newly generated id to the client
-  Ok(HttpResponse::Created().body(id.as_bytes().to_owned()))
+  id.into()
 }

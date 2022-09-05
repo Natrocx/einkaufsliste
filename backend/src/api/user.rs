@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use actix_identity::Identity;
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
-use actix_web::*;
+use actix_web::{self, get, post, web};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{ObjectList, User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
@@ -12,7 +12,7 @@ use zerocopy::AsBytes;
 use super::hash_password_with_salt;
 use crate::api::preprocess_payload;
 use crate::consts::object_list::ITEM_LIST_TYP;
-use crate::response::{sled_to_response, ResponseBody};
+use crate::response::*;
 use crate::{DbState, SessionState};
 
 #[post("/register/v1")]
@@ -21,22 +21,17 @@ pub(crate) async fn register_v1(
   data: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   let bytes = preprocess_payload::<128>(payload).await?;
 
-  let parameter = rkyv::from_bytes::<RegisterUserV1>(&bytes).map_err(ErrorBadRequest)?;
+  let parameter = rkyv::from_bytes::<RegisterUserV1>(&bytes)?;
 
   // validate registration request
   if parameter.password.len() < 8 {
-    return Err(ErrorBadRequest("Password is too short"));
+    return ResponseError::ErrorBadRequest.into();
   }
-  if data
-    .login_db
-    .get(&parameter.name)
-    .map_err(ErrorInternalServerError)?
-    .is_some()
-  {
-    return Err(ErrorBadRequest("A user with this name exists already"));
+  if data.login_db.get(&parameter.name)?.is_some() {
+    return ResponseError::ErrorBadRequest.into();
   }
 
   let hashed_pw = data.hash_password(&parameter.password).await;
@@ -49,25 +44,14 @@ pub(crate) async fn register_v1(
       profile_picture_id: None,
     },
     password: hashed_pw,
-  })
-  .map_err(ErrorInternalServerError)?;
+  })?;
 
-  data
-    .user_db
-    .insert(id.as_bytes(), value.as_bytes())
-    .map_err(ErrorInternalServerError)?;
-  data
-    .login_db
-    .insert(&parameter.name, value.as_bytes())
-    .map_err(ErrorInternalServerError)?;
+  data.user_db.insert(id.as_bytes(), value.as_bytes())?;
+  data.login_db.insert(&parameter.name, value.as_bytes())?;
 
-  let cookie_secret = sessions
-    .insert_new_session_for_id(id)
-    .map_err(ErrorInternalServerError)?;
+  sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
 
-  identity.remember(cookie_secret);
-
-  Ok(HttpResponse::Created().body(id.to_be_bytes().to_vec()))
+  id.into()
 }
 
 /// calling this with correct login data will invalidate any old session and set a cookie to enable access to protected resources
@@ -77,30 +61,17 @@ pub(crate) async fn login_v1(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, Error> {
+) -> Response {
   let bytes = preprocess_payload::<128>(payload).await?;
 
-  let login_request = rkyv::from_bytes::<LoginUserV1>(&bytes).map_err(ErrorBadRequest)?;
+  let login_request = rkyv::from_bytes::<LoginUserV1>(&bytes)?;
 
-  let id = match check_password(&login_request, &state.login_db) {
-    Ok(valid) => valid,
-    Err(e) => match e {
-      PasswordValidationError::DbAccessError(e) => return Err(ErrorInternalServerError(e)),
-      PasswordValidationError::NoSuchUserError => return Err(ErrorBadRequest("No such user")),
-      PasswordValidationError::RkyvValidationError => {
-        log::error!("Unexpected error interpreting database bytes");
-        return Err(ErrorInternalServerError(""));
-      }
-      PasswordValidationError::InvalidPassword => return Err(ErrorBadRequest("Invalid Password")),
-    },
-  };
+  let id = check_password(&login_request, &state.login_db)?;
 
-  let cookie_secret = sessions
-    .insert_new_session_for_id(id)
-    .map_err(ErrorInternalServerError)?;
-  identity.remember(cookie_secret);
+  // remember user id for session
+  sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
 
-  Ok(HttpResponse::Ok().body(""))
+  Response::empty()
 }
 
 fn check_password<'a>(
@@ -119,7 +90,7 @@ fn check_password<'a>(
 
   let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
 
-  if request_pw_hash == &*user.password.hash {
+  if hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
     Ok(user.user.id)
   } else {
     debug!(
@@ -132,7 +103,7 @@ fn check_password<'a>(
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
 #[derive(Debug)]
-enum PasswordValidationError {
+pub enum PasswordValidationError {
   DbAccessError(sled::Error),
   NoSuchUserError,
   RkyvValidationError,
@@ -160,16 +131,16 @@ pub(crate) async fn get_user_profile(
   id: web::Path<String>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, crate::response::ResponseError> {
+) -> Response {
   sessions.confirm_user_login(&identity)?;
 
   let requested_users_id = match id.parse() {
     Ok(id) => id,
     Err(..) => sessions.get_id_for_identity(&identity)?,
   };
-  let user_bytes = state.user_db.get(requested_users_id.as_bytes());
 
-  sled_to_response(user_bytes)
+  // Objects may be served directly from db
+  state.user_db.get(requested_users_id.as_bytes()).into()
 }
 
 #[get("/user/lists")]
@@ -177,7 +148,7 @@ pub(crate) async fn get_users_lists(
   state: web::Data<DbState>,
   sessions: web::Data<SessionState>,
   identity: Identity,
-) -> Result<HttpResponse, crate::response::ResponseError> {
+) -> Response {
   let user_id = sessions.get_id_for_identity(&identity)?;
   let bytes = state
     .object_list_db
@@ -191,5 +162,5 @@ pub(crate) async fn get_users_lists(
     .find(|val| val.typ == ITEM_LIST_TYP)
     .ok_or_else(|| ErrorNotFound(""))?;
 
-  Ok(HttpResponse::Ok().body(ResponseBody::from(lists)))
+  Response::from(lists)
 }

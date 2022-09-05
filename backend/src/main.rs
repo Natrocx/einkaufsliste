@@ -1,9 +1,9 @@
 #![feature(generic_arg_infer)]
 #![feature(associated_type_bounds)]
+#![feature(try_trait_v2)]
 
 mod api;
 mod consts;
-mod middleware;
 pub mod response;
 mod util;
 
@@ -12,18 +12,20 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
-use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
-use actix_web::cookie::time::Duration;
-use actix_web::error::{ErrorInternalServerError, ErrorUnauthorized};
+use actix_identity::{Identity, IdentityMiddleware};
+use actix_session::storage::CookieSessionStore;
+use actix_session::SessionMiddleware;
 use actix_web::web::{self};
-use actix_web::{Error, HttpServer};
+use actix_web::HttpServer;
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
 use api::user::{login_v1, register_v1};
-
+use byteorder::{BigEndian, ReadBytesExt};
 use mimalloc::MiMalloc;
 use rand::{Rng, SeedableRng};
+use response::ResponseError;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
 use tokio::sync::Mutex;
@@ -55,13 +57,18 @@ async fn main() -> std::io::Result<()> {
   let db = sled::open("./sessions.sled")?;
   let session_state = SessionState {
     session_db: db.open_tree("users")?,
-    //db,
   };
+  let mut key = [0u8; 64];
+  rand::thread_rng().fill(&mut key);
 
-  let cookie_priv_key = rand::thread_rng().gen::<[u8; 32]>();
+  let cookie_priv_key = actix_web::cookie::Key::from(&key);
 
   HttpServer::new(move || {
     let cors_config = actix_cors::Cors::permissive();
+    let identity_mw = IdentityMiddleware::builder()
+      .visit_deadline(Some(Duration::from_secs(60 * 60 * 24 * 30)))
+      .logout_behaviour(actix_identity::config::LogoutBehaviour::PurgeSession)
+      .build();
 
     actix_web::App::new()
       .app_data(web::Data::new(application_state.clone()))
@@ -78,14 +85,8 @@ async fn main() -> std::io::Result<()> {
       .service(login_v1)
       .wrap(cors_config)
       .wrap(actix_web::middleware::Logger::default())
-      .wrap(IdentityService::new(
-        CookieIdentityPolicy::new(&cookie_priv_key)
-          .name("auth")
-          //.path("/")
-          //.domain(domain.as_str())
-          .max_age(Duration::hours(2))
-          .secure(false), // this can only be true if you have https
-      ))
+      .wrap(identity_mw)
+      .wrap(SessionMiddleware::new(CookieSessionStore::default(), cookie_priv_key.clone()))
   })
   .bind_rustls("127.0.0.1:8443", config)?
   .run()
@@ -110,24 +111,14 @@ pub struct DbState {
 /// Container for session-related database objects
 #[derive(Clone)]
 pub struct SessionState {
-  // TODO: needed?  db: sled::Db,
   session_db: sled::Tree,
 }
 
 impl SessionState {
-  pub fn insert_new_session_for_id(&self, id: u64) -> Result<String, sled::Error> {
-    let rng = rand::thread_rng(); // according to the rand crate, this is secure
-    let session_id_bytes = rng
-      .sample_iter(rand::distributions::Alphanumeric)
-      .take(256)
-      .collect::<Vec<u8>>();
+  pub fn insert_id_for_session(&self, id: u64, session: &str) -> Result<(), sled::Error> {
+    self.session_db.insert(session, id.as_bytes())?;
 
-    // this is safe as rand promises to return the proper ASCII values given our Alphanumeric distribution
-    let session_id = unsafe { String::from_utf8_unchecked(session_id_bytes) };
-
-    self.session_db.insert(&session_id, id.as_bytes())?;
-
-    Ok(session_id)
+    Ok(())
   }
 
   pub fn remove_session(&self, session: String) -> Result<Option<sled::IVec>, sled::Error> {
@@ -135,30 +126,32 @@ impl SessionState {
   }
 
   /// verify login and return id for session
-  pub fn get_id_for_session(&self, session: String) -> Result<u64, actix_web::Error> {
-    Ok(u64::from_be_bytes(
+  pub fn get_id_for_session(&self, session: String) -> Result<u64, ResponseError> {
+    Ok(
       self
         .session_db
         .get(session)
-        .map_err(ErrorInternalServerError)?
-        .ok_or_else(|| ErrorUnauthorized(""))?
+        .map_err(|_| ResponseError::ErrorInternalServerError)? // incorrectly stored ids?
+        .ok_or(ResponseError::ErrorUnauthorized)? // No session for given id?
         .as_bytes()
-        .try_into()
-        .map_err(ErrorInternalServerError)?,
-    ))
+        .read_u64::<BigEndian>()?,
+    )
+  }
+  /// This function explodes if the user is unauthenticated.
+  /// Returns user id for encoded identity
+  // TODO refactor when session store exists
+  pub fn get_id_for_identity(&self, identity: &Identity) -> Result<u64, ResponseError> {
+    self.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)
   }
 
-  pub fn get_id_for_identity(&self, identity: &Identity) -> Result<u64, actix_web::Error> {
-    self.get_id_for_session(identity.identity().ok_or_else(|| ErrorUnauthorized(""))?)
-  }
-
-  pub fn is_identity_present(&self, identity: Identity) -> Result<bool, actix_web::Error> {
-    let tmp = self
+  pub fn is_identity_present(&self, identity: Identity) -> Result<bool, ResponseError> {
+    let _tmp = self
       .session_db
-      .get(identity.identity().ok_or_else(|| ErrorUnauthorized("Not logged in."))?)
-      .map_err(ErrorInternalServerError)?;
+      .get(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)
+      .map_err(|_| ResponseError::ErrorInternalServerError)?
+      .ok_or(ResponseError::ErrorUnauthorized)?;
 
-    Ok(tmp.is_some())
+    Ok(true)
   }
 
   /// This function returns an Error if the user is not logged in.
@@ -168,13 +161,14 @@ impl SessionState {
   ///   confirm_user_login(&sessions, &identity)?;
   /// }
   /// ```
-  pub fn confirm_user_login(&self, identity: &Identity) -> Result<(), Error> {
-    let session_id = identity.identity().ok_or_else(|| ErrorUnauthorized(""))?;
+  pub fn confirm_user_login(&self, identity: &Identity) -> Result<(), ResponseError> {
+    let session_id = identity.id().map_err(|_e| ResponseError::ErrorNotFound)?;
 
-    match self.session_db.get(session_id).map_err(ErrorInternalServerError)? {
-      Some(_) => Ok(()),
-      None => Err(ErrorUnauthorized("")),
-    }
+    self
+      .session_db
+      .get(session_id)?
+      .ok_or(ResponseError::ErrorUnauthenticated)?;
+    Ok(())
   }
 }
 

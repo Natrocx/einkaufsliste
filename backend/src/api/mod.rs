@@ -1,18 +1,17 @@
-
 use actix_web::error::{self, ErrorBadRequest, ErrorForbidden, ErrorInternalServerError};
 use actix_web::{web, Error};
 use einkaufsliste::model::user::Password;
 use einkaufsliste::model::{AccessControlList, Identifiable};
-
-use rand::{Rng};
+use rand::Rng;
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::serializers::AllocSerializer;
 use rkyv::{AlignedVec, Deserialize, Serialize};
 use sled::Tree;
 use zerocopy::AsBytes;
 
+use crate::response::ResponseError;
 use crate::util::collect_from_payload;
-use crate::{DbState};
+use crate::DbState;
 
 pub(crate) mod article;
 pub(crate) mod item;
@@ -39,9 +38,10 @@ pub(crate) fn align_bytes<const SIZE_HINT: usize>(bytes: &bytes::Bytes) -> Align
   vec
 }
 
+// TODO: is this necessary
 pub(crate) async fn preprocess_payload<const SIZE_HINT: usize>(
   payload: web::Payload,
-) -> Result<AlignedVec, actix_web::Error> {
+) -> Result<AlignedVec, ResponseError> {
   Ok(align_bytes::<SIZE_HINT>(&collect_from_payload(payload).await?))
 }
 

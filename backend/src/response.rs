@@ -1,24 +1,134 @@
-use std::borrow::Borrow;
 
+use std::convert::{TryInto};
 use std::fmt::Display;
-
-
-
+use std::ops::{Deref, FromResidual, Try};
 
 use actix_web::body::{BodySize, MessageBody};
-use actix_web::error::{ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
-use actix_web::{HttpResponse};
+use actix_web::error::{ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
+use actix_web::{HttpResponse, Responder};
+use bytecheck::StructCheckError;
 use bytes::{BufMut, BytesMut};
-use rkyv::de::deserializers::SharedDeserializeMap;
+use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
   AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer, CompositeSerializerError, FallbackScratch,
   HeapScratch, SharedSerializeMap, SharedSerializeMapError,
 };
-
+use rkyv::validation::validators::{CheckDeserializeError, DefaultValidatorError};
+use rkyv::validation::CheckArchiveError;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use sled::IVec;
 
-pub struct Response(Result<ResponseBody, ResponseError>);
+use crate::api::user::PasswordValidationError;
+
+pub struct Response(pub Result<ResponseBody, ResponseError>);
+
+impl Response {
+  pub fn empty() -> Self {
+    Self(Ok(ResponseBody::None))
+  }
+}
+
+impl From<ResponseError> for Response {
+  fn from(e: ResponseError) -> Self {
+    Self(Err(e))
+  }
+}
+
+/*
+impl<Data> From<&Data> for Response where Data: Archive
++ Serialize<
+  CompositeSerializer<
+    AlignedSerializer<AlignedVec>,
+    FallbackScratch<HeapScratch<4096>, AllocScratch>,
+    SharedSerializeMap,
+  >,
+>,
+<Data as Archive>::Archived: Deserialize<Data, SharedDeserializeMap>, {
+    fn from(data: &Data) -> Self {
+        Self(match ResponseBody::try_from(data) {
+          Ok(body) => Ok(body),
+          Err(e) => unreachable!()
+        })
+    }
+}
+*/
+
+impl<Data> From<Data> for Response
+where
+  Data: TryInto<ResponseBody, Error: Into<ResponseError>>,
+{
+  fn from(data: Data) -> Self {
+    match data.try_into() {
+      Ok(val) => Self(Ok(val)),
+      Err(e) => Self(Err(e.into())),
+    }
+  }
+}
+
+impl Deref for Response {
+  type Target = Result<ResponseBody, ResponseError>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl AsRef<Result<ResponseBody, ResponseError>> for Response {
+  fn as_ref(&self) -> &Result<ResponseBody, ResponseError> {
+    &self.0
+  }
+}
+
+// blanket implementation for ResponseErrors
+impl<B, E> FromResidual<std::result::Result<B, E>> for Response
+where
+  B: Into<ResponseBody>,
+  E: Into<ResponseError>,
+{
+  fn from_residual(residual: std::result::Result<B, E>) -> Self {
+    match residual {
+      Ok(body) => Self(Ok(body.into())),
+      Err(error) => Self(Err(error.into())),
+    }
+  }
+}
+
+impl Try for Response {
+  type Output = ResponseBody;
+
+  type Residual = Result<std::convert::Infallible, ResponseError>;
+
+  fn from_output(output: Self::Output) -> Self {
+    Self(Ok(output))
+  }
+
+  fn branch(self) -> std::ops::ControlFlow<Self::Residual, Self::Output> {
+    match self {
+      Self(Ok(val)) => std::ops::ControlFlow::Continue(val),
+      Self(Err(e)) => std::ops::ControlFlow::Break(Err(e)),
+    }
+  }
+}
+
+impl Responder for Response {
+  type Body = ResponseBody;
+
+  fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
+    match self.0 {
+      Ok(body) => HttpResponse::Ok().message_body(body).unwrap(),
+      Err(ResponseError::ErrorInternalServerError) => HttpResponse::InternalServerError()
+        .message_body(ResponseBody::None)
+        .unwrap(),
+      Err(ResponseError::ErrorBadRequest) => HttpResponse::BadRequest().message_body(ResponseBody::None).unwrap(),
+      Err(ResponseError::ErrorUnauthorized) => HttpResponse::Forbidden().message_body(ResponseBody::None).unwrap(),
+      Err(ResponseError::ErrorUnauthenticated) => {
+        HttpResponse::Unauthorized().message_body(ResponseBody::None).unwrap()
+      }
+      Err(ResponseError::ErrorNotFound) => HttpResponse::NotFound().message_body(ResponseBody::None).unwrap(),
+      Err(ResponseError::Infallible) => unreachable!(),
+    }
+  }
+}
 
 /// The return type for all Database-Webserver related API functions
 pub enum ResponseBody {
@@ -27,22 +137,44 @@ pub enum ResponseBody {
   None,
 }
 
+impl From<std::convert::Infallible> for ResponseBody {
+  fn from(_: std::convert::Infallible) -> Self {
+    Self::None
+  }
+}
+
 #[derive(Debug)]
 pub enum ResponseError {
+  ErrorBadRequest,
+  ErrorUnauthenticated,
   ErrorUnauthorized,
   ErrorNotFound,
   ErrorInternalServerError,
   Infallible,
 }
 
-impl Into<actix_web::Error> for ResponseError {
-  fn into(self) -> actix_web::Error {
-    match self {
-      ResponseError::ErrorUnauthorized => ErrorUnauthorized(self.to_string()),
-      ResponseError::ErrorNotFound => ErrorNotFound(self.to_string()),
-      ResponseError::ErrorInternalServerError => ErrorInternalServerError(self.to_string()),
+impl From<ResponseError> for actix_web::Error {
+  fn from(val: ResponseError) -> Self {
+    match val {
+      ResponseError::ErrorUnauthorized => ErrorForbidden(val.to_string()),
+      ResponseError::ErrorNotFound => ErrorNotFound(val.to_string()),
+      ResponseError::ErrorInternalServerError => ErrorInternalServerError(val.to_string()),
       ResponseError::Infallible => unreachable!(),
+      ResponseError::ErrorUnauthenticated => ErrorUnauthorized(val.to_string()),
+      ResponseError::ErrorBadRequest => ErrorBadRequest(val.to_string()),
     }
+  }
+}
+
+impl From<sled::Error> for ResponseError {
+  fn from(_: sled::Error) -> Self {
+    Self::ErrorInternalServerError
+  }
+}
+
+impl From<std::io::Error> for ResponseError {
+  fn from(_: std::io::Error) -> Self {
+    Self::ErrorInternalServerError
   }
 }
 
@@ -53,6 +185,10 @@ impl Display for ResponseError {
       ResponseError::ErrorInternalServerError => "An unknown internal Server error occurred".into(),
       ResponseError::Infallible => unreachable!(),
       ResponseError::ErrorNotFound => "Requested resource can not be found.".into(),
+      ResponseError::ErrorUnauthenticated => {
+        "You are not authenticated. You must authenticate yourself to use this endpoint.".into()
+      }
+      ResponseError::ErrorBadRequest => "Bad request: Submitted data was malformed.".into(),
     };
 
     write!(f, "{}", error)
@@ -83,11 +219,48 @@ impl From<Option<std::convert::Infallible>> for ResponseError {
   }
 }
 
-pub fn sled_to_response(sled_val: sled::Result<Option<IVec>>) -> Result<HttpResponse, ResponseError> {
-  match sled_val {
-    Ok(Some(val)) => Ok(HttpResponse::Ok().body(ResponseBody::from(val))),
-    Ok(None) => Err(ResponseError::ErrorNotFound),
-    Err(_) => Err(ResponseError::ErrorInternalServerError),
+/// Implements the DB-to-result conversion for sleds return-values. Semantics depend on @vec being
+/// a value returned by `sled::Tree::get`
+impl From<sled::Result<Option<IVec>>> for Response {
+  fn from(vec: sled::Result<Option<IVec>>) -> Self {
+    match vec {
+      Ok(Some(val)) => Self(Ok(ResponseBody::from(val))),
+      Ok(None) => Self(Err(ResponseError::ErrorNotFound)),
+      Err(_e) => Self(Err(ResponseError::ErrorInternalServerError)),
+    }
+  }
+}
+
+impl From<CheckDeserializeError<CheckArchiveError<StructCheckError, DefaultValidatorError>, SharedDeserializeMapError>>
+  for ResponseError
+{
+  fn from(
+    _e: CheckDeserializeError<CheckArchiveError<StructCheckError, DefaultValidatorError>, SharedDeserializeMapError>,
+  ) -> Self {
+    Self::ErrorInternalServerError
+  }
+}
+
+impl From<PasswordValidationError> for ResponseError {
+  fn from(e: PasswordValidationError) -> Self {
+    match e {
+      PasswordValidationError::DbAccessError(_) | PasswordValidationError::RkyvValidationError => {
+        Self::ErrorInternalServerError
+      }
+      PasswordValidationError::InvalidPassword | PasswordValidationError::NoSuchUserError => Self::ErrorBadRequest,
+    }
+  }
+}
+
+impl From<rkyv::de::deserializers::SharedDeserializeMapError> for ResponseError {
+  fn from(_: rkyv::de::deserializers::SharedDeserializeMapError) -> Self {
+    Self::ErrorInternalServerError
+  }
+}
+
+impl From<std::convert::Infallible> for ResponseError {
+  fn from(_: std::convert::Infallible) -> Self {
+    unreachable!()
   }
 }
 
@@ -129,19 +302,31 @@ where
     + Serialize<
       CompositeSerializer<
         AlignedSerializer<AlignedVec>,
-        FallbackScratch<HeapScratch<256>, AllocScratch>,
+        FallbackScratch<HeapScratch<4096>, AllocScratch>,
         SharedSerializeMap,
       >,
     >,
   <Data as Archive>::Archived: Deserialize<Data, SharedDeserializeMap>,
 {
   fn from(data: &Data) -> Self {
-    Self::Archive(rkyv::to_bytes(data.borrow()).unwrap().to_vec())
+    Self::Archive(rkyv::to_bytes(data).unwrap().to_vec())
   }
 }
 
 impl From<IVec> for ResponseBody {
   fn from(val: IVec) -> Self {
     Self::Archive(val.to_vec())
+  }
+}
+
+impl From<u64> for ResponseBody {
+  fn from(num: u64) -> Self {
+    Self::Numeric(num)
+  }
+}
+
+impl From<AlignedVec> for ResponseBody {
+  fn from(vec: AlignedVec) -> Self {
+    Self::Archive(vec.into())
   }
 }
