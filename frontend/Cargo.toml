@@ -10,11 +10,12 @@ license = "AGPL-3.0"
 reqwest = { version = "0.11.10", default-features = false, features = [
   "rustls-tls",
   "brotli",
+  "cookies",
   "cookie_crate",
   "cookie_store",
 ] } # we use rustls because openssl doesn't do wasm
 rkyv = { version = "0.7.38", features = ["archive_be"] }
-einkaufsliste = { path = "../" }
+einkaufsliste = { path = "../" , features = ["backend"]}
 bytes = "1.1.0"
 zerocopy = "0.6.1"
 futures = "0.3.21"
@@ -34,3 +35,4 @@ yew-router = "0.16.0"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+rand ="*"

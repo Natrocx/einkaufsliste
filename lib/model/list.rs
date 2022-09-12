@@ -1,10 +1,11 @@
+use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
 use super::shop::Shop;
 use super::Identifiable;
 
-#[derive(Archive, Serialize, Deserialize, PartialEq)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct List {
   pub id: <List as Identifiable>::Id,
@@ -13,6 +14,8 @@ pub struct List {
   pub image_id: Option<u32>,
   pub items: Vec<<Item as Identifiable>::Id>,
 }
+
+impl_from_request!(List);
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -23,6 +26,8 @@ pub struct FlatItemsList {
   pub image_id: Option<u32>,
   pub items: Vec<Item>,
 }
+
+impl_from_request!(FlatItemsList);
 
 impl FlatItemsList {
   pub fn from_list_and_items(list: List, vec: Vec<Item>) -> Self {

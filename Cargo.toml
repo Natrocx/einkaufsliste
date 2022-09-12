@@ -15,8 +15,19 @@ rkyv = { version = "0.7.38", features = [
 ] }
 zerocopy = "0.6.1"
 
+actix-web = { version = "4", optional = true }
+bytes = { version = "1", optional = true }
+futures = { version = "0", optional = true }
+async-trait = { version = "0.1.57", optional = true }
+log = { version = "*", optional = true }
+einkaufsliste-codegen = { version = "*", path = "./codegen" }
+
+[features]
+default = []
+backend = ["actix-web", "bytes", "futures", "async-trait", "log"]
+
 [workspace]
-members = ["frontend", "backend", "el_macro"]
+members = ["frontend", "backend", "codegen"]
 
 [lib]
 path = "lib/lib.rs"

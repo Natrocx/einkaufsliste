@@ -1,3 +1,7 @@
 {
-  "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+  "rust-analyzer.lens.references.adt.enable": true,
+  "rust-analyzer.inlayHints.bindingModeHints.enable": true,
+  "rust-analyzer.diagnostics.experimental.enable": true,
+  "rust-analyzer.checkOnSave.command": "clippy"
+  //"rust-analyzer.cargo.target": "wasm32-unknown-unknown"
 }

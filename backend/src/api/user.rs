@@ -1,31 +1,23 @@
 use std::fmt::Display;
 
 use actix_identity::Identity;
+use actix_web::dev::Extensions;
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
-use actix_web::{self, get, post, web};
+use actix_web::{self, get, post, web, HttpMessage, HttpRequest};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{ObjectList, User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
 use log::debug;
 use zerocopy::AsBytes;
 
-use super::hash_password_with_salt;
-use crate::api::preprocess_payload;
+
+
 use crate::consts::object_list::ITEM_LIST_TYP;
 use crate::response::*;
 use crate::{DbState, SessionState};
 
 #[post("/register/v1")]
-pub(crate) async fn register_v1(
-  payload: web::Payload,
-  data: web::Data<DbState>,
-  sessions: web::Data<SessionState>,
-  identity: Identity,
-) -> Response {
-  let bytes = preprocess_payload::<128>(payload).await?;
-
-  let parameter = rkyv::from_bytes::<RegisterUserV1>(&bytes)?;
-
+pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbState>, request: HttpRequest) -> Response {
   // validate registration request
   if parameter.password.len() < 8 {
     return ResponseError::ErrorBadRequest.into();
@@ -49,56 +41,22 @@ pub(crate) async fn register_v1(
   data.user_db.insert(id.as_bytes(), value.as_bytes())?;
   data.login_db.insert(&parameter.name, value.as_bytes())?;
 
-  sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
+  login_user(&request.extensions(), id)?;
+  //sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
 
   id.into()
 }
 
-/// calling this with correct login data will invalidate any old session and set a cookie to enable access to protected resources
+/// calling this with correct login data will set a cookie to enable access to protected resources
 #[post("/login/v1")]
-pub(crate) async fn login_v1(
-  payload: web::Payload,
-  state: web::Data<DbState>,
-  sessions: web::Data<SessionState>,
-  identity: Identity,
-) -> Response {
-  let bytes = preprocess_payload::<128>(payload).await?;
-
-  let login_request = rkyv::from_bytes::<LoginUserV1>(&bytes)?;
-
-  let id = check_password(&login_request, &state.login_db)?;
+pub(crate) async fn login_v1(login_request: LoginUserV1, state: web::Data<DbState>, request: HttpRequest) -> Response {
+  debug!("Vier");
+  let id = state.check_password(&login_request)?;
 
   // remember user id for session
-  sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
+  login_user(&request.extensions(), id)?;
 
-  Response::empty()
-}
-
-fn check_password<'a>(
-  login: &'a LoginUserV1,
-  user_db: &'a sled::Tree,
-) -> Result<<User as Identifiable>::Id, PasswordValidationError> {
-  let stored_user = user_db
-    .get(&login.name)
-    .map_err(PasswordValidationError::DbAccessError)?
-    .ok_or(PasswordValidationError::NoSuchUserError)?;
-
-  let user = unsafe {
-    rkyv::from_bytes_unchecked::<UserWithPassword>(&stored_user)
-      .map_err(|_| PasswordValidationError::RkyvValidationError)?
-  };
-
-  let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
-
-  if hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
-    Ok(user.user.id)
-  } else {
-    debug!(
-      "Password validation error: {}, {}: {:?}, {:?}",
-      login.name, login.password, request_pw_hash, user.password.hash
-    );
-    Err(PasswordValidationError::InvalidPassword)
-  }
+  Response::from(id)
 }
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
@@ -132,8 +90,6 @@ pub(crate) async fn get_user_profile(
   sessions: web::Data<SessionState>,
   identity: Identity,
 ) -> Response {
-  sessions.confirm_user_login(&identity)?;
-
   let requested_users_id = match id.parse() {
     Ok(id) => id,
     Err(..) => sessions.get_id_for_identity(&identity)?,
@@ -163,4 +119,10 @@ pub(crate) async fn get_users_lists(
     .ok_or_else(|| ErrorNotFound(""))?;
 
   Response::from(lists)
+}
+
+pub fn login_user(exts: &Extensions, id: <User as Identifiable>::Id) -> std::result::Result<(), ResponseError> {
+  Identity::login(exts, id.to_string()).map_err(|_| ResponseError::ErrorInternalServerError)?;
+
+  Result::<(), ResponseError>::Ok(())
 }

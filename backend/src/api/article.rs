@@ -9,7 +9,6 @@ use zerocopy::AsBytes;
 
 use crate::api::{new_generic_acl, preprocess_payload, store_in_db};
 use crate::response::{Response, ResponseError};
-
 use crate::{DbState, SessionState};
 
 #[get("/article/{id}")]
@@ -19,17 +18,12 @@ async fn get_article_by_id(
   sessions: web::Data<SessionState>,
   identity: Identity,
 ) -> Response {
-  let article_id = id
-    .as_ref()
-    .parse::<u64>()
-    .map_err(|_| ResponseError::ErrorBadRequest)?;
+  let article_id = id.as_ref().parse::<u64>().map_err(|_| ResponseError::ErrorBadRequest)?;
 
   // check if the user has access:
   check_article_acl(article_id, &state, &sessions, identity)?;
 
-  state
-    .article_db
-    .get(article_id.as_bytes()).into()
+  state.article_db.get(article_id.as_bytes()).into()
 }
 
 #[put("/article")]
@@ -61,26 +55,20 @@ async fn store_article(
   // the only security check done here is login, since the id is generated and no data can be overwritten/read
   sessions.confirm_user_login(&identity)?;
 
-let bytes = preprocess_payload::<256>(body).await?;
+  let bytes = preprocess_payload::<256>(body).await?;
 
-  let user_id = sessions
-    .get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
+  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
 
   let mut archived = rkyv::from_bytes::<Article>(&bytes).map_err(|_| ResponseError::ErrorBadRequest)?;
   archived.id = data.db.generate_id()?;
   let db = &data.article_db;
 
-  db.insert::<&[u8], &[u8]>(
-    archived.id.as_bytes(),
-    rkyv::to_bytes::<_, 384>(&archived)?
-      .as_slice(),
-  )?;
+  db.insert::<&[u8], &[u8]>(archived.id.as_bytes(), rkyv::to_bytes::<_, 384>(&archived)?.as_slice())?;
 
   // since this is a new object we need to create an acl for this
   new_generic_acl::<Article, User>(archived.id, user_id, &data.article_db)?;
 
-Response::empty()
-
+  Response::empty()
 }
 
 fn check_article_acl(

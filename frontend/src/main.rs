@@ -13,22 +13,32 @@ use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
 use log::Level;
+use rand::distributions::{Standard, Alphanumeric};
+use rand::prelude::Distribution;
+use rand::Rng;
+use reqwest::StatusCode;
 use rkyv::validation::validators::CheckDeserializeError;
 use ui::App;
 
 use crate::service::api::APIService;
 
 fn main() {
-  let _ = console_log::init_with_level(Level::Debug);
+  console_log::init_with_level(Level::Debug).unwrap();
   yew::start_app::<App>();
 }
 
 #[test]
 fn test_requests() {
   let rt = tokio::runtime::Runtime::new().unwrap();
-  let api_service = APIService::new("https://localhost:8443").unwrap();
+  let api_service = APIService::insecure().unwrap();
 
   rt.block_on(async {
+    let rng = rand::thread_rng();
+    let user_name = format!(
+      "test_user_{}",
+      rng.sample_iter(Alphanumeric).take(15).map(|num| num as char).collect::<String>()
+    );
+
     println!("-------------- unauthenticated POST /itemList -------------");
     api_service
       .push_new_item_list(List {
@@ -45,7 +55,7 @@ fn test_requests() {
     println!("-------------- POST /register/v1 -------------------");
     let user_id = api_service
       .register_v1(&RegisterUserV1 {
-        name: "test_user".to_owned(),
+        name: user_name.clone(),
         password: "EinPasswortMit8Zeichen".to_owned(),
       })
       .await
@@ -55,7 +65,7 @@ fn test_requests() {
     println!("-------------- POST /login/v1 ----------------------");
     api_service
       .login_v1(&LoginUserV1 {
-        name: "test_user".to_string(),
+        name: user_name.clone(),
         password: "EinPasswortMit8Zeichen".to_string(),
       })
       .await
@@ -65,7 +75,7 @@ fn test_requests() {
     println!("-------------- POST /login/v1 with incorrect credentials ----------");
     api_service
       .login_v1(&LoginUserV1 {
-        name: "test_user".to_string(),
+        name: user_name.clone(),
         password: "EinPasswortMit8ZeichenUndFehler".to_string(),
       })
       .await
@@ -142,7 +152,7 @@ pub enum TransmissionError {
   SerializationError,
   NetworkError(reqwest::Error),
   InvalidResponseError(String),
-  FailedRequest,
+  FailedRequest(StatusCode),
   Unknown(String),
 }
 
@@ -152,7 +162,7 @@ impl Display for TransmissionError {
       TransmissionError::SerializationError => "An Error occured during client-side serialization".to_owned(),
       TransmissionError::NetworkError(e) => format!("A network Error occured during transmission: {}", e),
       TransmissionError::InvalidResponseError(e) => format!("An invalid response was returned from the server: {}", e),
-      TransmissionError::FailedRequest => "The request was not successfull (non 200-return)".to_owned(),
+      TransmissionError::FailedRequest(status) => "The request was not successful: {status}".to_owned(),
       TransmissionError::Unknown(e) => format!("An unknown error occured: {e}"),
     };
 
@@ -165,7 +175,7 @@ impl From<reqwest::Error> for TransmissionError {
     if e.is_status() {
       TransmissionError::InvalidResponseError(e.to_string())
     } else if e.is_request() {
-      TransmissionError::FailedRequest
+      TransmissionError::FailedRequest(e.status().unwrap())
     } else if e.is_body() || e.is_decode() {
       TransmissionError::SerializationError
     } else {

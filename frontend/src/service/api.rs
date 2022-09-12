@@ -1,7 +1,4 @@
 use std::fmt::Display;
-use std::fs::File;
-use std::io::{BufReader, Read};
-use std::path::Path;
 
 use bytes::Buf;
 use einkaufsliste::model::item::Item;
@@ -11,7 +8,6 @@ use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::{ObjectList, User};
 use einkaufsliste::model::Identifiable;
 use futures::lock::Mutex;
-use futures::TryFutureExt;
 use reqwest::{Client, StatusCode};
 use rkyv::AlignedVec;
 use zerocopy::AsBytes;
@@ -52,6 +48,22 @@ impl APIService {
     Ok(APIService {
       http_client: Mutex::new(client),
       base_url,
+    })
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub fn insecure() -> Result<APIService, APIServiceInitializationError> {
+    let client = reqwest::ClientBuilder::new()
+      .cookie_store(true)
+      .danger_accept_invalid_certs(true)
+      .https_only(true)
+      .http2_prior_knowledge()
+      .build()
+      .map_err(|_| APIServiceInitializationError::BuildingClient)?;
+
+    Ok(APIService {
+      http_client: Mutex::new(client),
+      base_url: "https://localhost:8443",
     })
   }
 
@@ -109,8 +121,11 @@ impl APIService {
       .map_err(TransmissionError::NetworkError)?;
 
     let response_bytes = match response.status() {
-      StatusCode::OK => response.bytes().await.map_err(|_| TransmissionError::FailedRequest)?,
-      _ => return Err(TransmissionError::FailedRequest),
+      StatusCode::OK => response
+        .bytes()
+        .await
+        .map_err(|e| TransmissionError::InvalidResponseError(format!("Empty Response. Expected data. {e}")))?,
+      status => return Err(TransmissionError::FailedRequest(status)),
     };
 
     // the alignment is apparently lost along the way so we need to reallocate + realign (by copying)
@@ -140,11 +155,10 @@ impl APIService {
       .await
       .map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
-    // i hate this api...
     if new_id_bytes.len() < 8 {
       Err(TransmissionError::InvalidResponseError("Answer was too short.".into()))
     } else {
-      Ok(new_id_bytes.get_u64_le()) //FIXME: Endianness
+      Ok(new_id_bytes.get_u64())
     }
   }
 
@@ -159,8 +173,11 @@ impl APIService {
       .map_err(TransmissionError::NetworkError)?;
 
     let response_bytes = match response.status() {
-      StatusCode::OK => response.bytes().await.map_err(|_| TransmissionError::FailedRequest)?,
-      _ => return Err(TransmissionError::FailedRequest),
+      StatusCode::OK => response
+        .bytes()
+        .await
+        .map_err(|e| TransmissionError::InvalidResponseError(format!("Empty Response. Expected data: {e}")))?,
+      status => return Err(TransmissionError::FailedRequest(status)),
     };
 
     // the alignment is apparently lost along the way so we need to reallocate + realign (by copying)
@@ -188,8 +205,8 @@ impl APIService {
       .map_err(TransmissionError::NetworkError)?;
 
     match response.status() {
-      StatusCode::CREATED => Ok(()),
-      _ => Err(TransmissionError::FailedRequest),
+      StatusCode::OK => Ok(()),
+      status => Err(TransmissionError::FailedRequest(status)),
     }
   }
 
@@ -206,6 +223,7 @@ impl APIService {
       .send()
       .await
       .map_err(TransmissionError::NetworkError)?;
+    // juggle ownership
     let status = response.status();
 
     let mut id_bytes = response
@@ -214,14 +232,16 @@ impl APIService {
       .map_err(|e| TransmissionError::InvalidResponseError(e.to_string()))?;
 
     match status {
-      StatusCode::CREATED => {
+      StatusCode::OK => {
         if id_bytes.len() < 8 {
-          Err(TransmissionError::FailedRequest)
+          Err(TransmissionError::InvalidResponseError(
+            "Incomplete response from server".to_string(),
+          ))
         } else {
           Ok(id_bytes.get_u64())
         }
       }
-      _ => Err(TransmissionError::FailedRequest),
+      _ => Err(TransmissionError::FailedRequest(status)),
     }
   }
 
@@ -234,7 +254,7 @@ impl APIService {
       .lock()
       .await
       .post(url)
-      .body(bytes.to_vec())
+      .body(bytes.into_vec())
       .send()
       .await
       .map_err(TransmissionError::NetworkError)?;
@@ -243,15 +263,14 @@ impl APIService {
       StatusCode::OK => {
         let mut response_bytes = response.bytes().await.unwrap();
         if response_bytes.len() < 8 {
-          // todo move to Identifiable trait?
-          Ok(response_bytes.get_u64())
-        } else {
           Err(TransmissionError::InvalidResponseError(
-            "Incomplete response.".to_string(),
+            "Incomplete response from server.".to_string(),
           ))
+        } else {
+          Ok(response_bytes.get_u64())
         }
       }
-      _ => Err(TransmissionError::FailedRequest),
+      status => Err(TransmissionError::FailedRequest(status)),
     }
   }
 
@@ -271,7 +290,7 @@ impl APIService {
 
     match response.status() {
       StatusCode::OK => Ok(()),
-      _ => Err(TransmissionError::FailedRequest),
+      status => Err(TransmissionError::FailedRequest(status)),
     }
   }
 

@@ -1,11 +1,10 @@
-use actix_web::error::{self, ErrorBadRequest, ErrorForbidden, ErrorInternalServerError};
+use actix_web::error::{ErrorBadRequest, ErrorForbidden, ErrorInternalServerError};
 use actix_web::{web, Error};
 use einkaufsliste::model::user::Password;
 use einkaufsliste::model::{AccessControlList, Identifiable};
 use rand::Rng;
-use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::serializers::AllocSerializer;
-use rkyv::{AlignedVec, Deserialize, Serialize};
+use rkyv::{AlignedVec, Serialize};
 use sled::Tree;
 use zerocopy::AsBytes;
 
@@ -123,25 +122,6 @@ pub(crate) fn hash_password_with_salt(password: &str, salt: &[u8]) -> Vec<u8> {
   hasher.update(salt);
 
   hasher.finalize().as_bytes().to_vec()
-}
-
-pub async fn handle_generic_post<
-  'a,
-  T: 'a + Serialize<AllocSerializer<SIZE_HINT>> + Deserialize<T, SharedDeserializeMap>,
-  const SIZE_HINT: usize,
->(
-  payload: web::Payload,
-) -> Result<(), actix_web::Error>
-where
-  <T as rkyv::Archive>::Archived: 'a + bytecheck::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>,
-  <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
-{
-  let bytes = collect_from_payload(payload).await.map_err(error::ErrorBadRequest)?;
-  let _aligned_bytes = align_bytes::<SIZE_HINT>(&bytes);
-
-  //let checked_val = rkyv::from_bytes::<T>(&aligned_bytes).map_err(error::ErrorBadRequest)?;
-  // i cant figure out how, since rkyv requires a reference of 'a lifetime, which we cannot obtain here. Without this, we effectively have store_in_db
-  Ok(())
 }
 
 /// Generates and stores new AccessControlList

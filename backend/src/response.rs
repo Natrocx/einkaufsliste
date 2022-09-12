@@ -1,13 +1,15 @@
-
-use std::convert::{TryInto};
+use std::convert::TryInto;
 use std::fmt::Display;
 use std::ops::{Deref, FromResidual, Try};
 
+
 use actix_web::body::{BodySize, MessageBody};
-use actix_web::error::{ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized};
+use actix_web::error::{
+  ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, PayloadError,
+};
 use actix_web::{HttpResponse, Responder};
 use bytecheck::StructCheckError;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
   AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer, CompositeSerializerError, FallbackScratch,
@@ -17,6 +19,7 @@ use rkyv::validation::validators::{CheckDeserializeError, DefaultValidatorError}
 use rkyv::validation::CheckArchiveError;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use sled::IVec;
+use zerocopy::AsBytes;
 
 use crate::api::user::PasswordValidationError;
 
@@ -33,25 +36,6 @@ impl From<ResponseError> for Response {
     Self(Err(e))
   }
 }
-
-/*
-impl<Data> From<&Data> for Response where Data: Archive
-+ Serialize<
-  CompositeSerializer<
-    AlignedSerializer<AlignedVec>,
-    FallbackScratch<HeapScratch<4096>, AllocScratch>,
-    SharedSerializeMap,
-  >,
->,
-<Data as Archive>::Archived: Deserialize<Data, SharedDeserializeMap>, {
-    fn from(data: &Data) -> Self {
-        Self(match ResponseBody::try_from(data) {
-          Ok(body) => Ok(body),
-          Err(e) => unreachable!()
-        })
-    }
-}
-*/
 
 impl<Data> From<Data> for Response
 where
@@ -264,6 +248,20 @@ impl From<std::convert::Infallible> for ResponseError {
   }
 }
 
+impl From<PayloadError> for ResponseError {
+  fn from(err: PayloadError) -> Self {
+    match err {
+      PayloadError::Incomplete(_) => ResponseError::ErrorBadRequest,
+      PayloadError::EncodingCorrupted => ResponseError::ErrorBadRequest,
+      PayloadError::Overflow => ResponseError::ErrorBadRequest,
+      PayloadError::UnknownLength => ResponseError::ErrorBadRequest,
+      PayloadError::Http2Payload(_) => ResponseError::ErrorBadRequest,
+      PayloadError::Io(_) => ResponseError::ErrorInternalServerError,
+      _ => ResponseError::ErrorInternalServerError,
+    }
+  }
+}
+
 impl MessageBody for ResponseBody {
   type Error = ResponseError;
 
@@ -279,7 +277,8 @@ impl MessageBody for ResponseBody {
     self: std::pin::Pin<&mut Self>,
     _cx: &mut std::task::Context<'_>,
   ) -> std::task::Poll<Option<Result<bytes::Bytes, Self::Error>>> {
-    std::task::Poll::Ready(match self.get_mut() {
+    let body = self.get_mut();
+    let val = std::task::Poll::Ready(match body {
       ResponseBody::Archive(val) => Some({
         // serve data in a single go and do not return anything else
         let val = std::mem::take(val);
@@ -292,7 +291,21 @@ impl MessageBody for ResponseBody {
         bytes.put_u64(*num);
         bytes.into()
       })),
-    })
+    });
+    drop(std::mem::replace(body, ResponseBody::None));
+
+    val
+  }
+
+  fn try_into_bytes(self) -> Result<bytes::Bytes, Self>
+  where
+    Self: Sized,
+  {
+    match self {
+      ResponseBody::Archive(vec) => Ok(vec.into()),
+      ResponseBody::Numeric(num) => Ok(Bytes::from(num.to_be().as_bytes().to_owned())),
+      ResponseBody::None => Ok(Bytes::new()),
+    }
   }
 }
 

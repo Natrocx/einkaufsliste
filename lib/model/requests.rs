@@ -1,3 +1,4 @@
+use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
@@ -10,6 +11,8 @@ pub struct StoreItemAttached {
   pub list_id: u64,
 }
 
+impl_from_request!(StoreItemAttached);
+
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct RegisterUserV1 {
@@ -17,9 +20,13 @@ pub struct RegisterUserV1 {
   pub password: String,
 }
 
+impl_from_request!(RegisterUserV1);
+
 #[derive(Archive, Serialize, Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct LoginUserV1 {
   pub name: String,
   pub password: String,
 }
+
+impl_from_request!(LoginUserV1);

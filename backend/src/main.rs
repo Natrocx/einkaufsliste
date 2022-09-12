@@ -19,15 +19,21 @@ use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::web::{self};
 use actix_web::HttpServer;
+use api::hash_password_with_salt;
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
-use api::user::{login_v1, register_v1};
+use api::user::{login_v1, register_v1, PasswordValidationError};
 use byteorder::{BigEndian, ReadBytesExt};
+use einkaufsliste::model::requests::LoginUserV1;
+use einkaufsliste::model::user::{User, UserWithPassword};
+use einkaufsliste::model::Identifiable;
+use log::debug;
 use mimalloc::MiMalloc;
 use rand::{Rng, SeedableRng};
 use response::ResponseError;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
+
 use tokio::sync::Mutex;
 use zerocopy::AsBytes;
 
@@ -86,7 +92,10 @@ async fn main() -> std::io::Result<()> {
       .wrap(cors_config)
       .wrap(actix_web::middleware::Logger::default())
       .wrap(identity_mw)
-      .wrap(SessionMiddleware::new(CookieSessionStore::default(), cookie_priv_key.clone()))
+      .wrap(SessionMiddleware::new(
+        CookieSessionStore::default(),
+        cookie_priv_key.clone(),
+      ))
   })
   .bind_rustls("127.0.0.1:8443", config)?
   .run()
@@ -106,6 +115,33 @@ pub struct DbState {
   object_list_db: sled::Tree,
   // TODO: consider moving to threadlocal
   rng: Arc<Mutex<rand_xoshiro::Xoshiro256PlusPlus>>, /* rng for salts: there is no need for the salt to be securely generated as even a normal random number prevents rainbow-table attacks */
+}
+
+impl DbState {
+  fn check_password(&self, login: &LoginUserV1) -> Result<<User as Identifiable>::Id, PasswordValidationError> {
+    let stored_user = self
+      .login_db
+      .get(&login.name)
+      .map_err(PasswordValidationError::DbAccessError)?
+      .ok_or(PasswordValidationError::NoSuchUserError)?;
+
+    let user = unsafe {
+      rkyv::from_bytes_unchecked::<UserWithPassword>(&stored_user)
+        .map_err(|_| PasswordValidationError::RkyvValidationError)?
+    };
+
+    let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
+
+    if hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
+      Ok(user.user.id)
+    } else {
+      debug!(
+        "Password validation error: {:?}, {:?}",
+        request_pw_hash, user.password.hash
+      );
+      Err(PasswordValidationError::InvalidPassword)
+    }
+  }
 }
 
 /// Container for session-related database objects

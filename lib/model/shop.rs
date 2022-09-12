@@ -1,3 +1,4 @@
+use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
@@ -13,3 +14,5 @@ pub struct Shop {
 impl Identifiable for Shop {
   type Id = u64;
 }
+
+impl_from_request!(Shop);
