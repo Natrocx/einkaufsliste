@@ -1,9 +1,7 @@
-
-
 use actix_identity::Identity;
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
+use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use actix_web::web::{
-  Payload, {self},
+  {self},
 };
 use actix_web::{get, post};
 use einkaufsliste::model::article::Article;
@@ -14,40 +12,29 @@ use einkaufsliste::model::user::User;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
-use crate::api::{new_generic_acl, preprocess_payload};
+use crate::api::new_generic_acl;
 use crate::response::{Response, ResponseError};
-
-use crate::{DbState, SessionState};
+use crate::util::identity_ext::IdentityExt;
+use crate::{DbState};
 
 #[get("/item/{id}")]
-pub async fn get_item_by_id(
-  id: web::Path<String>,
-  state: web::Data<DbState>,
-  sessions: web::Data<SessionState>,
-  identity: Identity,
-) -> Response {
-  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
-  let idx = id.parse::<u64>().map_err(|_| ResponseError::ErrorBadRequest)?;
+pub async fn get_item_by_id(id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
+  let user_id = identity.parse()?;
 
-  state.verify_access::<Item, User>(idx, user_id)?;
+  state.verify_access::<Item, User>(*id, user_id)?;
 
   let db = &state.item_db;
-  db.get(idx.as_bytes()).into()
+  db.get(id.as_bytes()).into()
 }
 
 //TODO: remove?
 #[post("/item")]
-pub async fn store_item_unattached(
-  payload: Payload,
-  state: web::Data<DbState>,
-  sessions: web::Data<SessionState>,
-  identity: Identity,
-) -> Response {
-  let user_id = sessions.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthorized)?)?;
-  let aligned_bytes = preprocess_payload::<256>(payload).await?;
+pub async fn store_item_unattached(item: Item, state: web::Data<DbState>, identity: Identity) -> Response {
+  let user_id = identity.parse()?;
 
-  let item = rkyv::from_bytes::<Item>(&aligned_bytes).map_err(ErrorBadRequest)?;
-  state.item_db.insert(item.id.as_bytes(), aligned_bytes.as_slice())?;
+  state
+    .item_db
+    .insert(item.id.as_bytes(), rkyv::to_bytes::<_, 256>(&item)?.as_bytes())?;
 
   new_generic_acl::<Article, User>(item.id, user_id, &state.acl_db)?;
 
@@ -56,11 +43,7 @@ pub async fn store_item_unattached(
 
 #[post("/item/attached")]
 pub async fn store_item_attached(param: StoreItemAttached, state: web::Data<DbState>, identity: Identity) -> Response {
-  let user_id = identity
-    .id()
-    .map_err(|_| ResponseError::ErrorUnauthorized)?
-    .parse()
-    .map_err(|_| ResponseError::ErrorBadRequest)?;
+  let user_id = identity.parse()?;
 
   state.verify_access::<List, User>(param.list_id, user_id)?;
 
@@ -110,15 +93,10 @@ pub async fn store_item_attached(param: StoreItemAttached, state: web::Data<DbSt
 }
 
 #[get("/itemList/{id}/flat")]
-pub async fn get_item_list_flat(id: web::Path<String>, state: web::Data<DbState>, identity: Identity) -> Response {
-  let user_id = identity
-    .id()
-    .map_err(|_| ResponseError::ErrorInternalServerError)?
-    .parse()
-    .map_err(|_| ResponseError::ErrorInternalServerError)?;
-  let list_id = id.parse::<u64>().map_err(ErrorBadRequest)?;
+pub async fn get_item_list_flat(list_id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
+  let user_id = identity.parse()?;
 
-  state.verify_access::<List, User>(list_id, user_id)?;
+  state.verify_access::<List, User>(*list_id, user_id)?;
 
   let list_bytes = state
     .list_db
@@ -153,12 +131,7 @@ pub async fn get_item_list_flat(id: web::Path<String>, state: web::Data<DbState>
 
 #[post("/itemList")]
 pub(crate) async fn store_item_list(mut param: List, state: web::Data<DbState>, identity: Identity) -> Response {
-  let user_id = identity
-    .id()
-    .map_err(|_| ResponseError::ErrorUnauthenticated)?
-    .parse()
-    .map_err(|_| ResponseError::ErrorInternalServerError)?;
-
+  let user_id = identity.parse()?;
   let db = &state.list_db;
 
   // while an id is provided with the archived data, we do not use this id, given that the client does not know the new id as this is DB-managed information

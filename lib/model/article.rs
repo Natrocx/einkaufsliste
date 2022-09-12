@@ -1,3 +1,4 @@
+use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::shop::Shop;
@@ -16,3 +17,5 @@ pub struct Article {
 impl Identifiable for Article {
   type Id = u64;
 }
+
+impl_from_request!(Article);

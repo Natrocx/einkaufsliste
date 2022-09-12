@@ -10,11 +10,10 @@ use einkaufsliste::model::Identifiable;
 use log::debug;
 use zerocopy::AsBytes;
 
-
-
 use crate::consts::object_list::ITEM_LIST_TYP;
 use crate::response::*;
-use crate::{DbState, SessionState};
+use crate::util::identity_ext::IdentityExt;
+use crate::{DbState};
 
 #[post("/register/v1")]
 pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbState>, request: HttpRequest) -> Response {
@@ -42,7 +41,6 @@ pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbSta
   data.login_db.insert(&parameter.name, value.as_bytes())?;
 
   login_user(&request.extensions(), id)?;
-  //sessions.insert_id_for_session(id, &identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)?;
 
   id.into()
 }
@@ -86,13 +84,12 @@ impl Display for PasswordValidationError {
 #[get("/user/{id}")]
 pub(crate) async fn get_user_profile(
   state: web::Data<DbState>,
-  id: web::Path<String>,
-  sessions: web::Data<SessionState>,
+  id: web::Path<Option<u64>>,
   identity: Identity,
 ) -> Response {
-  let requested_users_id = match id.parse() {
-    Ok(id) => id,
-    Err(..) => sessions.get_id_for_identity(&identity)?,
+  let requested_users_id = match *id {
+    Some(id) => id,
+    None => identity.parse()?,
   };
 
   // Objects may be served directly from db
@@ -100,12 +97,8 @@ pub(crate) async fn get_user_profile(
 }
 
 #[get("/user/lists")]
-pub(crate) async fn get_users_lists(
-  state: web::Data<DbState>,
-  sessions: web::Data<SessionState>,
-  identity: Identity,
-) -> Response {
-  let user_id = sessions.get_id_for_identity(&identity)?;
+pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identity) -> Response {
+  let user_id = identity.parse()?;
   let bytes = state
     .object_list_db
     .get(user_id.as_bytes())

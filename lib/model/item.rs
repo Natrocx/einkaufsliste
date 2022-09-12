@@ -1,3 +1,4 @@
+use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::article::Article;
@@ -14,6 +15,7 @@ pub struct Item {
   pub article_id: Option<<Article as Identifiable>::Id>,
   pub alternative_article_ids: Option<Vec<<Article as Identifiable>::Id>>,
 }
+impl_from_request!(Item);
 
 #[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]

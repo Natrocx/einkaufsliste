@@ -1,4 +1,3 @@
-//#![feature(generic_associated_types)]
 #![feature(async_closure)]
 
 pub mod service;
@@ -13,9 +12,6 @@ use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::shop::Shop;
 use log::Level;
-use rand::distributions::{Standard, Alphanumeric};
-use rand::prelude::Distribution;
-use rand::Rng;
 use reqwest::StatusCode;
 use rkyv::validation::validators::CheckDeserializeError;
 use ui::App;
@@ -29,6 +25,10 @@ fn main() {
 
 #[test]
 fn test_requests() {
+  use rand::distributions::{Alphanumeric, Standard};
+  use rand::prelude::Distribution;
+  use rand::Rng;
+
   let rt = tokio::runtime::Runtime::new().unwrap();
   let api_service = APIService::insecure().unwrap();
 
@@ -36,7 +36,11 @@ fn test_requests() {
     let rng = rand::thread_rng();
     let user_name = format!(
       "test_user_{}",
-      rng.sample_iter(Alphanumeric).take(15).map(|num| num as char).collect::<String>()
+      rng
+        .sample_iter(Alphanumeric)
+        .take(15)
+        .map(|num| num as char)
+        .collect::<String>()
     );
 
     println!("-------------- unauthenticated POST /itemList -------------");
