@@ -4,8 +4,7 @@ use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::User;
 use zerocopy::AsBytes;
 
-use crate::api::new_generic_acl;
-use crate::response::{Response};
+use crate::response::Response;
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
 
@@ -27,7 +26,7 @@ pub async fn store_shop(mut param: Shop, state: web::Data<DbState>, identity: Id
   let shop_as_bytes = rkyv::to_bytes::<_, 128>(&param)?;
   state.shop_db.insert(id.as_bytes(), &*shop_as_bytes)?;
 
-  new_generic_acl::<Shop, User>(id, user_id, &state.acl_db)?;
+  state.create_acl::<Shop, User>(id, user_id)?;
 
   id.into()
 }

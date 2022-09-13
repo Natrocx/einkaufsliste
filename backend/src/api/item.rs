@@ -1,8 +1,6 @@
 use actix_identity::Identity;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
-use actix_web::web::{
-  {self},
-};
+use actix_web::web::{self};
 use actix_web::{get, post};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::item::Item;
@@ -12,10 +10,9 @@ use einkaufsliste::model::user::User;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
-use crate::api::new_generic_acl;
 use crate::response::{Response, ResponseError};
 use crate::util::identity_ext::IdentityExt;
-use crate::{DbState};
+use crate::DbState;
 
 #[get("/item/{id}")]
 pub async fn get_item_by_id(id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
@@ -36,7 +33,7 @@ pub async fn store_item_unattached(item: Item, state: web::Data<DbState>, identi
     .item_db
     .insert(item.id.as_bytes(), rkyv::to_bytes::<_, 256>(&item)?.as_bytes())?;
 
-  new_generic_acl::<Article, User>(item.id, user_id, &state.acl_db)?;
+  state.create_acl::<Article, User>(item.id, user_id)?;
 
   Response::empty()
 }
@@ -140,7 +137,7 @@ pub(crate) async fn store_item_list(mut param: List, state: web::Data<DbState>, 
   param.id = id;
   db.insert(id.as_bytes(), rkyv::to_bytes::<_, 64>(&param)?.as_bytes())?;
 
-  new_generic_acl::<List, User>(id, user_id, &state.acl_db)?;
+  state.create_acl::<List, User>(id, user_id)?;
 
   // we need to return the newly generated id to the client
   id.into()

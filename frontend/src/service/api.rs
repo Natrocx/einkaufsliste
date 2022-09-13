@@ -1,4 +1,7 @@
 use std::fmt::Display;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::Arc;
 
 use bytes::Buf;
 use einkaufsliste::model::item::Item;
@@ -13,6 +16,57 @@ use rkyv::AlignedVec;
 use zerocopy::AsBytes;
 
 use crate::TransmissionError;
+
+pub trait ApplicationState {}
+
+pub struct Uninitialized;
+impl ApplicationState for Uninitialized {}
+
+pub struct LoggedIn;
+impl ApplicationState for LoggedIn {}
+
+#[derive(Clone)]
+pub struct APIServiceII<T: ApplicationState> {
+  service: Arc<APIService>,
+  state: PhantomData<T>,
+}
+
+impl APIServiceII<Uninitialized> {
+  pub fn new(api_service: APIService) -> Self {
+    Self {
+      service: Arc::new(api_service),
+      state: PhantomData {},
+    }
+  }
+
+  pub async fn login(self, command: &LoginUserV1) -> Result<APIServiceII<LoggedIn>, APIServiceII<Uninitialized>> {
+    match self.service.login_v1(command).await {
+      Ok(_) => Ok(APIServiceII {
+        service: self.service,
+        state: PhantomData {},
+      }),
+      Err(_) => Err(self),
+    }
+  }
+
+  pub async fn register(self, command: &RegisterUserV1) -> Result<APIServiceII<LoggedIn>, APIServiceII<Uninitialized>> {
+    match self.service.register_v1(command).await {
+      Ok(_) => Ok(APIServiceII {
+        service: self.service,
+        state: PhantomData {},
+      }),
+      Err(_) => Err(self),
+    }
+  }
+}
+
+impl Deref for APIServiceII<LoggedIn> {
+  type Target = APIService;
+
+  fn deref(&self) -> &Self::Target {
+    &self.service
+  }
+}
 
 #[derive(Debug)]
 pub enum APIServiceInitializationError {
@@ -213,7 +267,7 @@ impl APIService {
   pub(crate) async fn register_v1(&self, command: &RegisterUserV1) -> Result<u64, TransmissionError> {
     let url = self.build_url("/register/v1");
 
-    let bytes = rkyv::to_bytes::<_, 128>(command).map_err(|_| TransmissionError::SerializationError)?;
+    let bytes = rkyv::to_bytes::<_, 256>(command).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
       .lock()

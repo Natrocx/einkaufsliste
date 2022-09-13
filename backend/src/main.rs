@@ -1,9 +1,11 @@
+// nightly for some MUCH cleaner code
 #![feature(generic_arg_infer)]
 #![feature(associated_type_bounds)]
 #![feature(try_trait_v2)]
 
 mod api;
 mod consts;
+pub mod db;
 pub mod response;
 mod util;
 
@@ -11,32 +13,35 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use std::sync::Arc;
+
 use std::time::Duration;
 
-use actix_identity::{Identity, IdentityMiddleware};
+use actix_identity::IdentityMiddleware;
 use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
+
 use actix_web::web::{self};
 use actix_web::HttpServer;
-use api::hash_password_with_salt;
+
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
-use api::user::{login_v1, register_v1, PasswordValidationError};
-use byteorder::{BigEndian, ReadBytesExt};
-use einkaufsliste::model::requests::LoginUserV1;
-use einkaufsliste::model::user::{User, UserWithPassword};
-use einkaufsliste::model::Identifiable;
-use log::debug;
+use api::user::{login_v1, register_v1};
+use db::DbState;
+
+
+
+
 use mimalloc::MiMalloc;
-use rand::{Rng, SeedableRng};
-use response::ResponseError;
+use rand::{Rng};
+
+
+
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
 
-use tokio::sync::Mutex;
-use zerocopy::AsBytes;
 
+
+// Use a reasonable global allocator to avoid performance problems due to rkyv serialization allocations
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -57,13 +62,9 @@ async fn main() -> std::io::Result<()> {
     login_db: db.open_tree("login")?,
     object_list_db: db.open_tree("ol")?,
     db,
-    rng: Arc::new(Mutex::new(rand_xoshiro::Xoshiro256PlusPlus::from_entropy())),
+    //rng: Arc::new(Mutex::new(rand_xoshiro::Xoshiro256PlusPlus::from_entropy())),
   };
 
-  let db = sled::open("./sessions.sled")?;
-  let session_state = SessionState {
-    session_db: db.open_tree("users")?,
-  };
   let mut key = [0u8; 64];
   rand::thread_rng().fill(&mut key);
 
@@ -78,7 +79,6 @@ async fn main() -> std::io::Result<()> {
 
     actix_web::App::new()
       .app_data(web::Data::new(application_state.clone()))
-      .app_data(web::Data::new(session_state.clone()))
       .service(crate::api::article::store_article)
       .service(crate::api::article::get_article_by_id)
       .service(crate::api::item::get_item_by_id)
@@ -100,112 +100,6 @@ async fn main() -> std::io::Result<()> {
   .bind_rustls("127.0.0.1:8443", config)?
   .run()
   .await
-}
-
-#[derive(Clone)]
-pub struct DbState {
-  db: sled::Db,
-  article_db: sled::Tree,
-  item_db: sled::Tree,
-  shop_db: sled::Tree,
-  list_db: sled::Tree,
-  acl_db: sled::Tree,
-  user_db: sled::Tree,
-  login_db: sled::Tree,
-  object_list_db: sled::Tree,
-  // TODO: consider moving to threadlocal
-  rng: Arc<Mutex<rand_xoshiro::Xoshiro256PlusPlus>>, /* rng for salts: there is no need for the salt to be securely generated as even a normal random number prevents rainbow-table attacks */
-}
-
-impl DbState {
-  fn check_password(&self, login: &LoginUserV1) -> Result<<User as Identifiable>::Id, PasswordValidationError> {
-    let stored_user = self
-      .login_db
-      .get(&login.name)
-      .map_err(PasswordValidationError::DbAccessError)?
-      .ok_or(PasswordValidationError::NoSuchUserError)?;
-
-    let user = unsafe {
-      rkyv::from_bytes_unchecked::<UserWithPassword>(&stored_user)
-        .map_err(|_| PasswordValidationError::RkyvValidationError)?
-    };
-
-    let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
-
-    if hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
-      Ok(user.user.id)
-    } else {
-      debug!(
-        "Password validation error: {:?}, {:?}",
-        request_pw_hash, user.password.hash
-      );
-      Err(PasswordValidationError::InvalidPassword)
-    }
-  }
-}
-
-/// Container for session-related database objects
-#[derive(Clone)]
-pub struct SessionState {
-  session_db: sled::Tree,
-}
-
-impl SessionState {
-  pub fn insert_id_for_session(&self, id: u64, session: &str) -> Result<(), sled::Error> {
-    self.session_db.insert(session, id.as_bytes())?;
-
-    Ok(())
-  }
-
-  pub fn remove_session(&self, session: String) -> Result<Option<sled::IVec>, sled::Error> {
-    self.session_db.remove(session)
-  }
-
-  /// verify login and return id for session
-  pub fn get_id_for_session(&self, session: String) -> Result<u64, ResponseError> {
-    Ok(
-      self
-        .session_db
-        .get(session)
-        .map_err(|_| ResponseError::ErrorInternalServerError)? // incorrectly stored ids?
-        .ok_or(ResponseError::ErrorUnauthorized)? // No session for given id?
-        .as_bytes()
-        .read_u64::<BigEndian>()?,
-    )
-  }
-  /// This function explodes if the user is unauthenticated.
-  /// Returns user id for encoded identity
-  // TODO refactor when session store exists
-  pub fn get_id_for_identity(&self, identity: &Identity) -> Result<u64, ResponseError> {
-    self.get_id_for_session(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)
-  }
-
-  pub fn is_identity_present(&self, identity: Identity) -> Result<bool, ResponseError> {
-    let _tmp = self
-      .session_db
-      .get(identity.id().map_err(|_| ResponseError::ErrorUnauthenticated)?)
-      .map_err(|_| ResponseError::ErrorInternalServerError)?
-      .ok_or(ResponseError::ErrorUnauthorized)?;
-
-    Ok(true)
-  }
-
-  /// This function returns an Error if the user is not logged in.
-  /// It is intended to be used in an actix_web request handler like so:
-  /// ```rust
-  /// async fn some_fn(sessions: web::Data<SessionState>, identity: Identity, ...) {
-  ///   confirm_user_login(&sessions, &identity)?;
-  /// }
-  /// ```
-  pub fn confirm_user_login(&self, identity: &Identity) -> Result<(), ResponseError> {
-    let session_id = identity.id().map_err(|_e| ResponseError::ErrorNotFound)?;
-
-    self
-      .session_db
-      .get(session_id)?
-      .ok_or(ResponseError::ErrorUnauthenticated)?;
-    Ok(())
-  }
 }
 
 fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::ServerConfig, TlsInitError> {

@@ -1,16 +1,15 @@
 use actix_identity::Identity;
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
-
 use actix_web::{get, post, put, web, Result};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::{AccessControlList, Identifiable};
 use zerocopy::AsBytes;
 
-use crate::api::{new_generic_acl, store_in_db};
+use crate::db::RkyvStore;
 use crate::response::{Response, ResponseError};
 use crate::util::identity_ext::IdentityExt;
-use crate::{DbState};
+use crate::DbState;
 
 #[get("/article/{id}")]
 async fn get_article_by_id(
@@ -19,7 +18,7 @@ async fn get_article_by_id(
   identity: Identity,
 ) -> Response {
   // check if the user has access:
-  check_article_acl(*article_id, &state, identity)?;
+  check_article_acl(*article_id, &state, &identity)?;
 
   state.article_db.get(article_id.as_bytes()).into()
 }
@@ -27,9 +26,9 @@ async fn get_article_by_id(
 #[put("/article")]
 async fn update_article(article: Article, data: web::Data<DbState>, identity: Identity) -> Response {
   // before submitting parsed article to db we check the permissions:
-  check_article_acl(article.id, &data, identity)?;
+  check_article_acl(article.id, &data, &identity)?;
 
-  store_in_db::<Article, 384>(article.id, article, &data.article_db)?;
+  data.store(article.id, article)?;
 
   Response::empty()
 }
@@ -38,13 +37,13 @@ async fn update_article(article: Article, data: web::Data<DbState>, identity: Id
 async fn store_article(mut article: Article, data: web::Data<DbState>, identity: Identity) -> Response {
   let user_id = identity.parse()?;
 
-  article.id = data.db.generate_id()?;
-  let db = &data.article_db;
-
-  db.insert(article.id.as_bytes(), rkyv::to_bytes::<_, 384>(&article)?.as_slice())?;
+  // variable not inlineable because...???????
+  let new_id = data.db.generate_id()?;
+  article.id = new_id;
+  data.store(article.id, article)?;
 
   // since this is a new object we need to create an acl for this
-  new_generic_acl::<Article, User>(article.id, user_id, &data.article_db)?;
+  data.create_acl::<Article, User>(new_id, user_id)?;
 
   Response::empty()
 }
@@ -52,7 +51,7 @@ async fn store_article(mut article: Article, data: web::Data<DbState>, identity:
 fn check_article_acl(
   article_id: <Article as Identifiable>::Id,
   state: &DbState,
-  identity: Identity,
+  identity: &Identity,
 ) -> Result<(), ResponseError> {
   let user_id = identity.parse()?;
 
