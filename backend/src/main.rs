@@ -13,33 +13,21 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-
 use std::time::Duration;
 
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
-
 use actix_web::web::{self};
 use actix_web::HttpServer;
-
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
-use api::user::{login_v1, register_v1};
+use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
-
-
-
-
 use mimalloc::MiMalloc;
-use rand::{Rng};
-
-
-
+use rand::Rng;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
-
-
 
 // Use a reasonable global allocator to avoid performance problems due to rkyv serialization allocations
 #[global_allocator]
@@ -89,6 +77,7 @@ async fn main() -> std::io::Result<()> {
       .service(store_shop)
       .service(register_v1)
       .service(login_v1)
+      .service(get_users_lists)
       .wrap(cors_config)
       .wrap(actix_web::middleware::Logger::default())
       .wrap(identity_mw)
@@ -102,13 +91,20 @@ async fn main() -> std::io::Result<()> {
   .await
 }
 
-fn load_rustls_config(cert_path: &Path, key_path: &Path) -> Result<rustls::ServerConfig, TlsInitError> {
+fn load_rustls_config(
+  cert_path: &Path,
+  key_path: &Path,
+) -> Result<rustls::ServerConfig, TlsInitError> {
   // init server config builder with safe defaults
-  let config = ServerConfig::builder().with_safe_defaults().with_no_client_auth();
+  let config = ServerConfig::builder()
+    .with_safe_defaults()
+    .with_no_client_auth();
 
   // load TLS key/cert files
-  let cert_file = &mut BufReader::new(File::open(cert_path).map_err(TlsInitError::ReadingParameterPaths)?);
-  let key_file = &mut BufReader::new(File::open(key_path).map_err(TlsInitError::ReadingParameterPaths)?);
+  let cert_file =
+    &mut BufReader::new(File::open(cert_path).map_err(TlsInitError::ReadingParameterPaths)?);
+  let key_file =
+    &mut BufReader::new(File::open(key_path).map_err(TlsInitError::ReadingParameterPaths)?);
 
   // convert files to key/cert objects
   let cert_chain = rustls_pemfile::certs(cert_file)
@@ -141,7 +137,9 @@ enum TlsInitError {
 impl Display for TlsInitError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let error_message = match self {
-      Self::ReadingParameterPaths(e) => format!("Could not access files at the provided path: {}", e),
+      Self::ReadingParameterPaths(e) => {
+        format!("Could not access files at the provided path: {}", e)
+      }
       TlsInitError::BuildingChain(e) => format!("An Error occurred while building Keychain: {}", e),
       TlsInitError::MissingKeys => "Missing PEM files".to_owned(),
     };

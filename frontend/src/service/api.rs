@@ -162,6 +162,14 @@ impl APIService {
     }
   }
 
+  pub async fn get_item(&self, id: u64) -> Result<Item, TransmissionError> {
+    let url = self.build_url_with_id("/item", id);
+
+    let response = self.http_client.lock().await.get(url).send().await?;
+
+    Ok(rkyv::from_bytes::<Item>(&response.bytes().await?)?)
+  }
+
   pub(crate) async fn get_shop(&self, id: u64) -> Result<Shop, TransmissionError> {
     let url = self.build_url_with_id("/shop", id);
 
@@ -244,10 +252,10 @@ impl APIService {
     Ok(item_list)
   }
 
-  pub(crate) async fn push_item_attached(&self, command: StoreItemAttached) -> Result<(), TransmissionError> {
+  pub(crate) async fn push_item_attached(&self, command: StoreItemAttached) -> Result<u64, TransmissionError> {
     let url = self.build_url("/item/attached");
 
-    let bytes = rkyv::to_bytes::<_, 128>(&command).map_err(|_| TransmissionError::SerializationError)?;
+    let bytes = rkyv::to_bytes::<_, 256>(&command).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
       .lock()
@@ -255,12 +263,13 @@ impl APIService {
       .post(url)
       .body::<Vec<u8>>(bytes.into())
       .send()
-      .await
-      .map_err(TransmissionError::NetworkError)?;
+      .await?;
 
-    match response.status() {
-      StatusCode::OK => Ok(()),
-      status => Err(TransmissionError::FailedRequest(status)),
+    let mut response_bytes = response.bytes().await?;
+    if response_bytes.len() >= std::mem::size_of::<u64>() {
+      Ok(response_bytes.get_u64())
+    } else {
+      Err(TransmissionError::InvalidResponseError("Response was too short".into()))
     }
   }
 
@@ -349,7 +358,7 @@ impl APIService {
   }
 
   pub async fn get_users_lists(&self, user: &User) -> Result<ObjectList, TransmissionError> {
-    let url = format!("{}/users/lists", self.base_url);
+    let url = format!("{}/user/lists", self.base_url);
 
     let response = self.http_client.lock().await.get(&url).send().await?;
 

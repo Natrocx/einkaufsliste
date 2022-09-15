@@ -1,7 +1,7 @@
 #![feature(async_closure)]
 
-mod tests;
 pub mod service;
+mod tests;
 pub mod ui;
 
 use std::fmt::Display;

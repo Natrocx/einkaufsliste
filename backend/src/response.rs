@@ -2,18 +2,19 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use std::ops::{Deref, FromResidual, Try};
 
-
 use actix_web::body::{BodySize, MessageBody};
 use actix_web::error::{
-  ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, PayloadError,
+  ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized,
+  PayloadError,
 };
 use actix_web::{HttpResponse, Responder};
 use bytecheck::StructCheckError;
 use bytes::{BufMut, Bytes, BytesMut};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
-  AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer, CompositeSerializerError, FallbackScratch,
-  HeapScratch, SharedSerializeMap, SharedSerializeMapError,
+  AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer,
+  CompositeSerializerError, FallbackScratch, HeapScratch, SharedSerializeMap,
+  SharedSerializeMapError,
 };
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidatorError};
 use rkyv::validation::CheckArchiveError;
@@ -103,12 +104,18 @@ impl Responder for Response {
       Err(ResponseError::ErrorInternalServerError) => HttpResponse::InternalServerError()
         .message_body(ResponseBody::None)
         .unwrap(),
-      Err(ResponseError::ErrorBadRequest) => HttpResponse::BadRequest().message_body(ResponseBody::None).unwrap(),
-      Err(ResponseError::ErrorUnauthorized) => HttpResponse::Forbidden().message_body(ResponseBody::None).unwrap(),
-      Err(ResponseError::ErrorUnauthenticated) => {
-        HttpResponse::Unauthorized().message_body(ResponseBody::None).unwrap()
-      }
-      Err(ResponseError::ErrorNotFound) => HttpResponse::NotFound().message_body(ResponseBody::None).unwrap(),
+      Err(ResponseError::ErrorBadRequest) => HttpResponse::BadRequest()
+        .message_body(ResponseBody::None)
+        .unwrap(),
+      Err(ResponseError::ErrorUnauthorized) => HttpResponse::Forbidden()
+        .message_body(ResponseBody::None)
+        .unwrap(),
+      Err(ResponseError::ErrorUnauthenticated) => HttpResponse::Unauthorized()
+        .message_body(ResponseBody::None)
+        .unwrap(),
+      Err(ResponseError::ErrorNotFound) => HttpResponse::NotFound()
+        .message_body(ResponseBody::None)
+        .unwrap(),
       Err(ResponseError::Infallible) => unreachable!(),
     }
   }
@@ -165,7 +172,9 @@ impl From<std::io::Error> for ResponseError {
 impl Display for ResponseError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let error: String = match self {
-      ResponseError::ErrorUnauthorized => "You are not authorized to access the requested Ressource".into(),
+      ResponseError::ErrorUnauthorized => {
+        "You are not authorized to access the requested Ressource".into()
+      }
       ResponseError::ErrorInternalServerError => "An unknown internal Server error occurred".into(),
       ResponseError::Infallible => unreachable!(),
       ResponseError::ErrorNotFound => "Requested resource can not be found.".into(),
@@ -180,10 +189,18 @@ impl Display for ResponseError {
 }
 impl std::error::Error for ResponseError {}
 
-impl std::convert::From<CompositeSerializerError<std::convert::Infallible, AllocScratchError, SharedSerializeMapError>>
-  for ResponseError
+impl
+  std::convert::From<
+    CompositeSerializerError<std::convert::Infallible, AllocScratchError, SharedSerializeMapError>,
+  > for ResponseError
 {
-  fn from(_: CompositeSerializerError<std::convert::Infallible, AllocScratchError, SharedSerializeMapError>) -> Self {
+  fn from(
+    _: CompositeSerializerError<
+      std::convert::Infallible,
+      AllocScratchError,
+      SharedSerializeMapError,
+    >,
+  ) -> Self {
     Self::ErrorInternalServerError
   }
 }
@@ -215,11 +232,19 @@ impl From<sled::Result<Option<IVec>>> for Response {
   }
 }
 
-impl From<CheckDeserializeError<CheckArchiveError<StructCheckError, DefaultValidatorError>, SharedDeserializeMapError>>
-  for ResponseError
+impl
+  From<
+    CheckDeserializeError<
+      CheckArchiveError<StructCheckError, DefaultValidatorError>,
+      SharedDeserializeMapError,
+    >,
+  > for ResponseError
 {
   fn from(
-    _e: CheckDeserializeError<CheckArchiveError<StructCheckError, DefaultValidatorError>, SharedDeserializeMapError>,
+    _e: CheckDeserializeError<
+      CheckArchiveError<StructCheckError, DefaultValidatorError>,
+      SharedDeserializeMapError,
+    >,
   ) -> Self {
     Self::ErrorInternalServerError
   }
@@ -231,7 +256,9 @@ impl From<PasswordValidationError> for ResponseError {
       PasswordValidationError::DbAccessError(_) | PasswordValidationError::RkyvValidationError => {
         Self::ErrorInternalServerError
       }
-      PasswordValidationError::InvalidPassword | PasswordValidationError::NoSuchUserError => Self::ErrorBadRequest,
+      PasswordValidationError::InvalidPassword | PasswordValidationError::NoSuchUserError => {
+        Self::ErrorBadRequest
+      }
     }
   }
 }

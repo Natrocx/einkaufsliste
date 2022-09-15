@@ -1,7 +1,6 @@
 use actix_identity::Identity;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
-use actix_web::web::{self};
-use actix_web::{get, post};
+use actix_web::{get, post, web};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
@@ -10,28 +9,35 @@ use einkaufsliste::model::user::User;
 use sled::transaction::abort;
 use zerocopy::AsBytes;
 
+use crate::db::{ObjectStore, RawRkyvStore};
 use crate::response::{Response, ResponseError};
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
 
 #[get("/item/{id}")]
-pub async fn get_item_by_id(id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn get_item_by_id(
+  id: web::Path<u64>,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
 
   state.verify_access::<Item, User>(*id, user_id)?;
 
   let db = &state.item_db;
-  db.get(id.as_bytes()).into()
+  db.get(id.to_ne_bytes()).into()
 }
 
 //TODO: remove?
 #[post("/item")]
-pub async fn store_item_unattached(item: Item, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn store_item_unattached(
+  item: Item,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
 
-  state
-    .item_db
-    .insert(item.id.as_bytes(), rkyv::to_bytes::<_, 256>(&item)?.as_bytes())?;
+  state.store_unlisted(item.id, &item)?;
 
   state.create_acl::<Article, User>(item.id, user_id)?;
 
@@ -39,20 +45,21 @@ pub async fn store_item_unattached(item: Item, state: web::Data<DbState>, identi
 }
 
 #[post("/item/attached")]
-pub async fn store_item_attached(param: StoreItemAttached, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn store_item_attached(
+  mut param: StoreItemAttached,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
+  let item_id = state.db.generate_id()?;
 
   state.verify_access::<List, User>(param.list_id, user_id)?;
+  param.item.id = item_id;
 
   // insert item
-  state.item_db.insert(
-    param.item.id.as_bytes(),
-    rkyv::to_bytes::<_, 128>(&param.item)
-      .map_err(|_| ResponseError::ErrorBadRequest)?
-      .as_slice(),
-  )?;
+  state.store_unlisted(item_id, &param.item)?;
 
-  // TODO: migrate Errors
+  // TODO: rewrite
   state
     .list_db
     .transaction(|tx_id| {
@@ -86,11 +93,15 @@ pub async fn store_item_attached(param: StoreItemAttached, state: web::Data<DbSt
   // ensure that we can get items independent of their corresponding list
   state.copy_acl::<List, Item>(param.list_id, param.item.id)?;
 
-  Response::empty()
+  Response::from(item_id)
 }
 
 #[get("/itemList/{id}/flat")]
-pub async fn get_item_list_flat(list_id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn get_item_list_flat(
+  list_id: web::Path<u64>,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
 
   state.verify_access::<List, User>(*list_id, user_id)?;
@@ -110,7 +121,7 @@ pub async fn get_item_list_flat(list_id: web::Path<u64>, state: web::Data<DbStat
   let vec = list
     .items
     .iter()
-    .map(|idx| item_db.get(idx.as_bytes()))
+    .map(|idx| item_db.get(idx.to_ne_bytes()))
     .filter_map(|result| match result {
       Ok(val) => val,
       Err(_e) => {
@@ -127,15 +138,18 @@ pub async fn get_item_list_flat(list_id: web::Path<u64>, state: web::Data<DbStat
 }
 
 #[post("/itemList")]
-pub(crate) async fn store_item_list(mut param: List, state: web::Data<DbState>, identity: Identity) -> Response {
+pub(crate) async fn store_item_list(
+  mut param: List,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
-  let db = &state.list_db;
 
   // while an id is provided with the archived data, we do not use this id, given that the client does not know the new id as this is DB-managed information
   let id = state.db.generate_id()?;
 
   param.id = id;
-  db.insert(id.as_bytes(), rkyv::to_bytes::<_, 64>(&param)?.as_bytes())?;
+  state.store_listed(user_id, id, &param)?;
 
   state.create_acl::<List, User>(id, user_id)?;
 

@@ -1,4 +1,4 @@
-
+use std::ops::Deref;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -30,11 +30,29 @@ impl Identifiable for User {
   type Id = u64;
 }
 
-#[derive(Archive, Serialize, Deserialize, Debug)]
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct ObjectList {
   pub typ: u64,
   pub list: Vec<u64>,
 }
 
+impl ObjectList {
+  pub fn new(typ: u64) -> Self {
+    Self { typ, list: vec![] }
+  }
+}
 
+#[derive(Archive, Serialize, Deserialize, Debug, Default)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct UsersObjectLists {
+  pub lists: Vec<ObjectList>,
+}
+
+impl Deref for UsersObjectLists {
+  type Target = Vec<ObjectList>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.lists
+  }
+}

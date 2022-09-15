@@ -6,7 +6,7 @@ use einkaufsliste::model::user::User;
 use einkaufsliste::model::{AccessControlList, Identifiable};
 use zerocopy::AsBytes;
 
-use crate::db::RkyvStore;
+use crate::db::RawRkyvStore;
 use crate::response::{Response, ResponseError};
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
@@ -24,23 +24,31 @@ async fn get_article_by_id(
 }
 
 #[put("/article")]
-async fn update_article(article: Article, data: web::Data<DbState>, identity: Identity) -> Response {
+async fn update_article(
+  article: Article,
+  data: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   // before submitting parsed article to db we check the permissions:
   check_article_acl(article.id, &data, &identity)?;
 
-  data.store(article.id, article)?;
+  data.store_unlisted(article.id, &article)?;
 
   Response::empty()
 }
 
 #[post("/article")]
-async fn store_article(mut article: Article, data: web::Data<DbState>, identity: Identity) -> Response {
+async fn store_article(
+  mut article: Article,
+  data: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
 
   // variable not inlineable because...???????
   let new_id = data.db.generate_id()?;
   article.id = new_id;
-  data.store(article.id, article)?;
+  data.store_unlisted(article.id, &article)?;
 
   // since this is a new object we need to create an acl for this
   data.create_acl::<Article, User>(new_id, user_id)?;

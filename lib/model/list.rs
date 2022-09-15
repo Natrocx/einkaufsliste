@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
 use super::shop::Shop;
-use super::Identifiable;
+use super::{HasTypeDenominator, Identifiable};
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
@@ -43,4 +43,8 @@ impl FlatItemsList {
 
 impl Identifiable for List {
   type Id = u64;
+}
+
+impl HasTypeDenominator for List {
+  const DENOMINATOR: u64 = 0;
 }

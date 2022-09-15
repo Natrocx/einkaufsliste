@@ -4,19 +4,24 @@ use actix_identity::Identity;
 use actix_web::dev::Extensions;
 use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
 use actix_web::{self, get, post, web, HttpMessage, HttpRequest};
+use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
-use einkaufsliste::model::user::{ObjectList, User, UserWithPassword};
+use einkaufsliste::model::user::{ObjectList, User, UserWithPassword, UsersObjectLists};
 use einkaufsliste::model::Identifiable;
 use log::debug;
 use zerocopy::AsBytes;
 
-use crate::consts::object_list::ITEM_LIST_TYP;
+use crate::db::{self, ObjectStore};
 use crate::response::*;
 use crate::util::identity_ext::IdentityExt;
-use crate::{DbState};
+use crate::DbState;
 
 #[post("/register/v1")]
-pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbState>, request: HttpRequest) -> Response {
+pub(crate) async fn register_v1(
+  parameter: RegisterUserV1,
+  data: web::Data<DbState>,
+  request: HttpRequest,
+) -> Response {
   // validate registration request
   if parameter.password.len() < 8 {
     return ResponseError::ErrorBadRequest.into();
@@ -37,9 +42,11 @@ pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbSta
     password: hashed_pw,
   })?;
 
+  // TODO: move to RkyvStore/DbState?
   data.user_db.insert(id.as_bytes(), value.as_bytes())?;
   data.login_db.insert(&parameter.name, value.as_bytes())?;
 
+  // there isn't really a point in not logging the user in here
   login_user(&request.extensions(), id)?;
 
   id.into()
@@ -47,14 +54,18 @@ pub(crate) async fn register_v1(parameter: RegisterUserV1, data: web::Data<DbSta
 
 /// calling this with correct login data will set a cookie to enable access to protected resources
 #[post("/login/v1")]
-pub(crate) async fn login_v1(login_request: LoginUserV1, state: web::Data<DbState>, request: HttpRequest) -> Response {
+pub(crate) async fn login_v1(
+  login_request: LoginUserV1,
+  state: web::Data<DbState>,
+  request: HttpRequest,
+) -> Response {
   debug!("Vier");
   let id = state.check_password(&login_request)?;
 
   // remember user id for session
   login_user(&request.extensions(), id)?;
 
-  Response::from(id)
+  id.into()
 }
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
@@ -99,22 +110,18 @@ pub(crate) async fn get_user_profile(
 #[get("/user/lists")]
 pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identity) -> Response {
   let user_id = identity.parse()?;
-  let bytes = state
-    .object_list_db
-    .get(user_id.as_bytes())
-    .map_err(ErrorInternalServerError)?
-    .ok_or_else(|| ErrorNotFound(""))?;
 
-  let value = rkyv::from_bytes::<Vec<ObjectList>>(&bytes).map_err(ErrorBadRequest)?;
-  let lists = value
-    .iter()
-    .find(|val| val.typ == ITEM_LIST_TYP)
-    .ok_or_else(|| ErrorNotFound(""))?;
+  // read ObjectList from DB
+  let list = db::ObjectStore::<List, 512>::object_list(state.as_ref(), user_id)?;
+  debug!("{:?}", list);
 
-  Response::from(lists)
+  Response::from(&list)
 }
 
-pub fn login_user(exts: &Extensions, id: <User as Identifiable>::Id) -> std::result::Result<(), ResponseError> {
+pub fn login_user(
+  exts: &Extensions,
+  id: <User as Identifiable>::Id,
+) -> std::result::Result<(), ResponseError> {
   Identity::login(exts, id.to_string()).map_err(|_| ResponseError::ErrorInternalServerError)?;
 
   Result::<(), ResponseError>::Ok(())

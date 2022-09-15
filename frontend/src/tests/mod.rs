@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod api_tests {
+  use einkaufsliste::model::user::User;
 
   #[test]
   fn test_requests() {
@@ -49,6 +50,12 @@ mod api_tests {
         .unwrap();
       println!("New user id: {user_id}");
 
+      let user = User {
+        id: user_id,
+        name: user_name.clone(),
+        profile_picture_id: None,
+      };
+
       println!("-------------- POST /login/v1 ----------------------");
       api_service
         .login_v1(&LoginUserV1 {
@@ -87,27 +94,26 @@ mod api_tests {
       println!("Number of items in list: {}", list.items.len());
 
       println!("--------------- POST /item/attached -----------------");
-      println!(
-        "{}",
-        match api_service
-          .push_item_attached(StoreItemAttached {
-            item: Item {
-              id: 0,
-              name: "Test".to_owned(),
-              checked: false,
-              article_id: None,
-              alternative_article_ids: None,
-              amount: Some(1),
-              unit: Some(Unit::KiloGram)
-            },
-            list_id: id,
-          })
-          .await
-        {
-          Ok(_) => "Success!",
-          Err(_) => "Failure!",
-        }
-      );
+      let item_id = api_service
+        .push_item_attached(StoreItemAttached {
+          item: Item {
+            id: 0,
+            name: "Test".to_owned(),
+            checked: false,
+            article_id: None,
+            alternative_article_ids: None,
+            amount: Some(1),
+            unit: Some(Unit::KiloGram),
+          },
+          list_id: id,
+        })
+        .await
+        .unwrap();
+      println!("Success");
+
+      println!("------------------ GET /item/{item_id} --------------");
+      assert!(api_service.get_item(item_id).await.unwrap().id == item_id);
+      println!("Success");
 
       println!("------------------ GET /itemList/{{}}/flat --------------");
       let list = api_service.get_flat_items_list(id).await.unwrap();
@@ -116,6 +122,10 @@ mod api_tests {
         list.items.len(),
         std::mem::size_of_val(&list)
       );
+
+      println!("------------------ GET /user/lists --------------");
+      assert!(api_service.get_users_lists(&user).await.unwrap().list.len() == 1);
+      println!("Success");
 
       println!("------------------ POST /shop ----------------");
       let shop_id = api_service

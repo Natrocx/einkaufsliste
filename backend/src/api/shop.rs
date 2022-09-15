@@ -9,7 +9,11 @@ use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
 
 #[get("/shop/{id}")]
-pub async fn get_shop(id: web::Path<u64>, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn get_shop(
+  id: web::Path<u64>,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
   state.verify_access::<Shop, User>(*id, user_id)?;
 
@@ -17,7 +21,11 @@ pub async fn get_shop(id: web::Path<u64>, state: web::Data<DbState>, identity: I
 }
 
 #[post("/shop")]
-pub async fn store_shop(mut param: Shop, state: web::Data<DbState>, identity: Identity) -> Response {
+pub async fn store_shop(
+  mut param: Shop,
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response {
   let user_id = identity.parse()?;
 
   let id = state.db.generate_id()?;

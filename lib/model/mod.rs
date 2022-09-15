@@ -1,5 +1,3 @@
-
-
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::{Archive, Deserialize, Serialize};
 use zerocopy::AsBytes;
@@ -10,6 +8,10 @@ pub mod list;
 pub mod requests;
 pub mod shop;
 pub mod user;
+
+pub trait HasTypeDenominator {
+  const DENOMINATOR: u64;
+}
 
 // TODO: cam parameters to proc macros solve this?
 // since traits cannot be partially implemented, we cannot use codegen without crying so here we go:
