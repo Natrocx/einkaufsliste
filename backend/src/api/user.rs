@@ -2,16 +2,16 @@ use std::fmt::Display;
 
 use actix_identity::Identity;
 use actix_web::dev::Extensions;
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound};
+use actix_web::error::{ErrorInternalServerError};
 use actix_web::{self, get, post, web, HttpMessage, HttpRequest};
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
-use einkaufsliste::model::user::{ObjectList, User, UserWithPassword, UsersObjectLists};
+use einkaufsliste::model::user::{User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
 use log::debug;
 use zerocopy::AsBytes;
 
-use crate::db::{self, ObjectStore};
+use crate::db::{self};
 use crate::response::*;
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;

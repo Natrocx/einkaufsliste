@@ -1,4 +1,4 @@
-use sled::transaction::{abort, ConflictableTransactionError};
+use sled::transaction::{ConflictableTransactionError};
 
 use crate::response::ResponseError;
 
