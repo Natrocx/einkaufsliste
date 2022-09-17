@@ -188,13 +188,13 @@ impl Component for HomePage {
   fn view(&self, ctx: &yew::Context<Self>) -> Html {
     if !self.loaded_lists {
       let api_service = ctx.props().api_service.as_ref();
-      html! {
+      return html! {
         <div class="list-loading">
           <CircularLoadingIndicator />
         </div>
-      }
+      };
     } else {
-      html!()
+      return html! {};
     }
   }
 }

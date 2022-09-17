@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use actix_identity::Identity;
 use actix_web::dev::Extensions;
-use actix_web::error::{ErrorInternalServerError};
+use actix_web::error::ErrorInternalServerError;
 use actix_web::{self, get, post, web, HttpMessage, HttpRequest};
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
@@ -11,7 +11,7 @@ use einkaufsliste::model::Identifiable;
 use log::debug;
 use zerocopy::AsBytes;
 
-use crate::db::{self};
+use crate::db::{self, RawRkyvStore};
 use crate::response::*;
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
@@ -30,21 +30,23 @@ pub(crate) async fn register_v1(
     return ResponseError::ErrorBadRequest.into();
   }
 
-  let hashed_pw = data.hash_password(&parameter.password).await;
+  let hashed_pw = DbState::hash_password(&parameter.password).await;
   let id = data.db.generate_id().map_err(ErrorInternalServerError)?;
 
-  let value = rkyv::to_bytes::<_, 256>(&UserWithPassword {
+  let value = UserWithPassword {
     user: User {
       id,
       name: parameter.name.clone(),
       profile_picture_id: None,
     },
     password: hashed_pw,
-  })?;
+  };
 
   // TODO: move to RkyvStore/DbState?
-  data.user_db.insert(id.as_bytes(), value.as_bytes())?;
-  data.login_db.insert(&parameter.name, value.as_bytes())?;
+  <sled::Tree as RawRkyvStore<UserWithPassword, 128>>::store_unlisted(&data.user_db, id, &value)?;
+  data
+    .login_db
+    .insert(&parameter.name, &*rkyv::to_bytes::<_, 256>(&value)?)?;
 
   // there isn't really a point in not logging the user in here
   login_user(&request.extensions(), id)?;
@@ -68,7 +70,7 @@ pub(crate) async fn login_v1(
   id.into()
 }
 
-#[allow(clippy::enum_variant_names)] // this is an error enum
+#[allow(clippy::enum_variant_names)]// this is an error enum
 #[derive(Debug)]
 pub enum PasswordValidationError {
   DbAccessError(sled::Error),
@@ -112,7 +114,7 @@ pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identit
   let user_id = identity.parse()?;
 
   // read ObjectList from DB
-  let list = db::ObjectStore::<List, 512>::object_list(state.as_ref(), user_id)?;
+  let list = <db::DbState as db::ObjectStore<List, sled::Tree, 512>>::object_list(&state, user_id)?;
   debug!("{:?}", list);
 
   Response::from(&list)

@@ -1,4 +1,4 @@
-use sled::transaction::{ConflictableTransactionError};
+use sled::transaction::ConflictableTransactionError;
 
 use crate::response::ResponseError;
 
@@ -10,4 +10,8 @@ pub fn error<T: std::fmt::Display>(e: T) -> ResponseError {
 
 pub fn abort_error<T: std::fmt::Display>(e: T) -> ConflictableTransactionError<ResponseError> {
   ConflictableTransactionError::Abort(error(e))
+}
+
+pub fn bad_request<T>(_: T) -> ResponseError {
+  ResponseError::ErrorBadRequest
 }

@@ -1,24 +1,22 @@
 use actix_identity::Identity;
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
-use actix_web::{get, post, put, web, Result};
+use actix_web::{get, post, put, web};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::user::User;
-use einkaufsliste::model::{AccessControlList, Identifiable};
 use zerocopy::AsBytes;
 
 use crate::db::RawRkyvStore;
-use crate::response::{Response, ResponseError};
+use crate::response::Response;
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
 
 #[get("/article/{id}")]
-async fn get_article_by_id(
+pub(crate) async fn get_article_by_id(
   article_id: actix_web::web::Path<u64>,
   state: web::Data<DbState>,
   identity: Identity,
 ) -> Response {
   // check if the user has access:
-  check_article_acl(*article_id, &state, &identity)?;
+  state.verify_access::<Article, User>(*article_id, identity.parse()?)?;
 
   state.article_db.get(article_id.as_bytes()).into()
 }
@@ -30,15 +28,20 @@ async fn update_article(
   identity: Identity,
 ) -> Response {
   // before submitting parsed article to db we check the permissions:
-  check_article_acl(article.id, &data, &identity)?;
+  data.verify_access::<Article, User>(article.id, identity.parse()?)?;
 
-  data.store_unlisted(article.id, &article)?;
+  // reverse turbofish UwU
+  <sled::Tree as RawRkyvStore<einkaufsliste::model::article::Article, 512>>::store_unlisted(
+    &data.article_db,
+    article.id,
+    &article,
+  )?;
 
   Response::empty()
 }
 
 #[post("/article")]
-async fn store_article(
+pub(crate) async fn store_article(
   mut article: Article,
   data: web::Data<DbState>,
   identity: Identity,
@@ -48,34 +51,15 @@ async fn store_article(
   // variable not inlineable because...???????
   let new_id = data.db.generate_id()?;
   article.id = new_id;
-  data.store_unlisted(article.id, &article)?;
+
+  <sled::Tree as RawRkyvStore<einkaufsliste::model::article::Article, 512>>::store_unlisted(
+    &data.article_db,
+    article.id,
+    &article,
+  )?;
 
   // since this is a new object we need to create an acl for this
   data.create_acl::<Article, User>(new_id, user_id)?;
 
   Response::empty()
-}
-
-fn check_article_acl(
-  article_id: <Article as Identifiable>::Id,
-  state: &DbState,
-  identity: &Identity,
-) -> Result<(), ResponseError> {
-  let user_id = identity.parse()?;
-
-  let acl = rkyv::from_bytes::<AccessControlList<Article, User>>(
-    state
-      .acl_db
-      .get(article_id.as_bytes())
-      .map_err(ErrorInternalServerError)?
-      .ok_or_else(|| ErrorBadRequest("No acl for this object."))?
-      .as_bytes(),
-  )
-  .map_err(ErrorInternalServerError)?;
-
-  if acl.owner == user_id || acl.allowed_user_ids.contains(&user_id) {
-    Ok(())
-  } else {
-    Err(ResponseError::ErrorUnauthorized)
-  }
 }

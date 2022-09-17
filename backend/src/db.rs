@@ -1,22 +1,16 @@
-use actix_web::error::{ErrorBadRequest, ErrorInternalServerError};
-use einkaufsliste::model::article::Article;
-use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::LoginUserV1;
-use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::{ObjectList, Password, User, UserWithPassword, UsersObjectLists};
 use einkaufsliste::model::{AccessControlList, HasTypeDenominator, Identifiable};
 use log::debug;
 use rand::{thread_rng, Rng};
-
-
+use rkyv::de::deserializers::SharedDeserializeMap;
+use rkyv::Archive;
 use sled::transaction::{TransactionError, TransactionalTree};
 use zerocopy::AsBytes;
 
-use crate::api::hash_password_with_salt;
 use crate::api::user::PasswordValidationError;
 use crate::response::ResponseError;
-use crate::util::errors::{abort_error, error};
+use crate::util::errors::{abort_error, bad_request, error};
 
 #[derive(Clone)]
 pub struct DbState {
@@ -47,9 +41,9 @@ impl DbState {
         .map_err(|_| PasswordValidationError::RkyvValidationError)?
     };
 
-    let request_pw_hash = hash_password_with_salt(&login.password, &user.password.salt);
+    let request_pw_hash = Self::hash_password_with_salt(&login.password, &user.password.salt);
 
-    if hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
+    if Self::hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
       Ok(user.user.id)
     } else {
       debug!(
@@ -60,7 +54,15 @@ impl DbState {
     }
   }
 
-  pub(crate) async fn hash_password(&self, password: &str) -> Password {
+  pub(crate) fn hash_password_with_salt(password: &str, salt: &[u8]) -> Vec<u8> {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(password.as_bytes());
+    hasher.update(salt);
+
+    hasher.finalize().as_bytes().to_vec()
+  }
+
+  pub(crate) async fn hash_password(password: &str) -> Password {
     // there is no need for the salt to be securely generated as even a normal random number prevents rainbow-table attacks
     let mut salt = [0; 256];
     thread_rng().fill(&mut salt);
@@ -104,10 +106,9 @@ impl DbState {
       .map_err(|_| ResponseError::ErrorInternalServerError)?
       .ok_or(ResponseError::ErrorNotFound)?;
 
-    //TODO: is this safe?
     let acl =
       unsafe { rkyv::from_bytes_unchecked::<AccessControlList<Object, User>>(acl.as_bytes()) }
-        .map_err(|_| ResponseError::ErrorInternalServerError)?; // if this fails it's a bug
+        .map_err(error)?; // if this fails it's a bug
 
     match acl.owner == user_id || acl.allowed_user_ids.contains(&user_id) {
       true => Ok(()),
@@ -123,13 +124,13 @@ impl DbState {
     let list_acl = self
       .acl_db
       .get(list_id.as_bytes())
-      .map_err(ErrorInternalServerError)?
-      .ok_or_else(|| ErrorBadRequest(""))?;
+      .map_err(error)?
+      .ok_or_else(|| bad_request(()))?;
 
     self
       .acl_db
       .insert(item_id.as_bytes(), list_acl)
-      .map_err(ErrorInternalServerError)?;
+      .map_err(error)?;
 
     Ok(())
   }
@@ -172,11 +173,9 @@ impl DbState {
       .acl_db
       .insert(
         object_id.as_bytes(),
-        rkyv::to_bytes::<_, 256>(&new_acl)
-          .map_err(|_| ResponseError::ErrorInternalServerError)?
-          .to_vec(),
+        rkyv::to_bytes::<_, 256>(&new_acl).map_err(error)?.to_vec(),
       )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
+      .map_err(error)
   }
 }
 
@@ -191,20 +190,23 @@ pub trait ObjectStore<
         rkyv::ser::serializers::SharedSerializeMap,
       >,
     > + HasTypeDenominator,
+  ObjectTree: RawRkyvStore<T, SIZE_HINT>,
   const SIZE_HINT: usize,
->: RawRkyvStore<T, SIZE_HINT>
+> where
+  <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
 {
   fn store_listed(
     &self,
     user_id: u64,
     object_id: u64,
+    db: &ObjectTree,
     object: &T,
   ) -> Result<Option<sled::IVec>, ResponseError>;
 
   fn object_list(&self, user_id: u64) -> Result<ObjectList, ResponseError>;
 }
 
-impl<T, const SIZE_HINT: usize> ObjectStore<T, SIZE_HINT> for DbState
+impl<T, const SIZE_HINT: usize, ObjectTree> ObjectStore<T, ObjectTree, SIZE_HINT> for DbState
 where
   T: HasTypeDenominator
     + rkyv::Serialize<
@@ -217,16 +219,18 @@ where
         rkyv::ser::serializers::SharedSerializeMap,
       >,
     >,
-  DbState: RawRkyvStore<T, SIZE_HINT>,
+  <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
+
+  ObjectTree: RawRkyvStore<T, SIZE_HINT>,
 {
   fn store_listed(
     &self,
     user_id: u64,
     object_id: u64,
+    db: &ObjectTree,
     object: &T,
   ) -> Result<Option<sled::IVec>, ResponseError> {
     match self.object_list_db.transaction(|tx_db| {
-      // TODO: Maybe extract to function?
       // maintain object list for user
       let mut current_ol = unsafe {
         match tx_db.get(user_id.to_ne_bytes())? {
@@ -265,7 +269,7 @@ where
       Err(TransactionError::Abort(e)) => return Err(e),
     }
 
-    self.store_unlisted(object_id, object)
+    db.store_unlisted(object_id, object)
   }
 
   fn object_list(&self, user_id: u64) -> Result<ObjectList, ResponseError> {
@@ -285,9 +289,6 @@ where
 }
 
 /// This trait allows you to store objects serializable with [rkyv].
-///
-/// # Implementation
-/// This trait should be implemented manually on sled dbs for proper Tree selection. A macro may potentially also be used.
 pub trait RawRkyvStore<
   T: rkyv::Serialize<
     rkyv::ser::serializers::CompositeSerializer<
@@ -300,12 +301,18 @@ pub trait RawRkyvStore<
     >,
   >,
   const SIZE_HINT: usize,
->
+> where
+  <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
 {
   fn store_unlisted(&self, id: u64, value: &T) -> Result<Option<sled::IVec>, ResponseError>;
+
+  /// # Safety
+  /// You must manually ensure, that objects in the tree represent an archive of the generic type
+  /// Calling this with the wrong generic type should be an easy catch through unit testing.
+  unsafe fn get_unchecked(&self, id: u64) -> Result<T, ResponseError>;
 }
 
-impl<T, const SIZE_HINT: usize> RawRkyvStore<T, SIZE_HINT> for &sled::Tree
+impl<T, const SIZE_HINT: usize> RawRkyvStore<T, SIZE_HINT> for sled::Tree
 where
   T: rkyv::Serialize<
     rkyv::ser::serializers::CompositeSerializer<
@@ -317,11 +324,18 @@ where
       rkyv::ser::serializers::SharedSerializeMap,
     >,
   >,
+  <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
 {
   fn store_unlisted(&self, id: u64, value: &T) -> Result<Option<sled::IVec>, ResponseError> {
     self
       .insert(id.to_ne_bytes(), &*rkyv::to_bytes(value).map_err(error)?)
       .map_err(error)
+  }
+
+  unsafe fn get_unchecked(&self, id: u64) -> Result<T, ResponseError> {
+    let bytes = self.get(id.to_ne_bytes())?.ok_or_else(|| bad_request(()))?;
+
+    rkyv::from_bytes_unchecked(&bytes).map_err(error)
   }
 }
 
@@ -337,126 +351,20 @@ where
       rkyv::ser::serializers::SharedSerializeMap,
     >,
   >,
+  <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
 {
   fn store_unlisted(&self, id: u64, value: &T) -> Result<Option<sled::IVec>, ResponseError> {
     self
       .insert(&id.to_ne_bytes(), &*rkyv::to_bytes(value).map_err(error)?)
       .map_err(error)
   }
-}
 
-// manual implementations to allow for proper [sled::Tree] selection
+  unsafe fn get_unchecked(&self, id: u64) -> Result<T, ResponseError> {
+    let bytes = self
+      .get(id.to_ne_bytes())
+      .map_err(error)?
+      .ok_or_else(|| bad_request(()))?;
 
-impl RawRkyvStore<Article, 512> for DbState {
-  fn store_unlisted(&self, id: u64, value: &Article) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .article_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 512>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl RawRkyvStore<Item, 512> for DbState {
-  fn store_unlisted(&self, id: u64, value: &Item) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .item_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 512>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl RawRkyvStore<Shop, 1024> for DbState {
-  fn store_unlisted(&self, id: u64, value: &Shop) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .shop_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 1024>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl RawRkyvStore<List, 512> for DbState {
-  fn store_unlisted(&self, id: u64, value: &List) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .list_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 256>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl<T: Identifiable, S: Identifiable> RawRkyvStore<AccessControlList<T, S>, 128> for DbState
-where
-  <T as einkaufsliste::model::Identifiable>::Id: rkyv::Serialize<
-    rkyv::ser::serializers::CompositeSerializer<
-      rkyv::ser::serializers::AlignedSerializer<rkyv::AlignedVec>,
-      rkyv::ser::serializers::FallbackScratch<
-        rkyv::ser::serializers::HeapScratch<128>,
-        rkyv::ser::serializers::AllocScratch,
-      >,
-      rkyv::ser::serializers::SharedSerializeMap,
-    >,
-  >,
-  <S as einkaufsliste::model::Identifiable>::Id: rkyv::Serialize<
-    rkyv::ser::serializers::CompositeSerializer<
-      rkyv::ser::serializers::AlignedSerializer<rkyv::AlignedVec>,
-      rkyv::ser::serializers::FallbackScratch<
-        rkyv::ser::serializers::HeapScratch<128>,
-        rkyv::ser::serializers::AllocScratch,
-      >,
-      rkyv::ser::serializers::SharedSerializeMap,
-    >,
-  >,
-{
-  fn store_unlisted(
-    &self,
-    id: u64,
-    value: &AccessControlList<T, S>,
-  ) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .acl_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl RawRkyvStore<User, 128> for DbState {
-  fn store_unlisted(&self, id: u64, value: &User) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .user_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 128>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
-  }
-}
-
-impl RawRkyvStore<UserWithPassword, 512> for DbState {
-  fn store_unlisted(
-    &self,
-    id: u64,
-    value: &UserWithPassword,
-  ) -> Result<Option<sled::IVec>, ResponseError> {
-    self
-      .login_db
-      .insert(
-        id.to_ne_bytes(),
-        &*rkyv::to_bytes::<_, 512>(value).map_err(|_| ResponseError::ErrorBadRequest)?,
-      )
-      .map_err(|_| ResponseError::ErrorInternalServerError)
+    rkyv::from_bytes_unchecked(&bytes).map_err(error)
   }
 }

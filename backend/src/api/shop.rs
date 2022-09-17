@@ -4,6 +4,7 @@ use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::User;
 use zerocopy::AsBytes;
 
+use crate::db::RawRkyvStore;
 use crate::response::Response;
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
@@ -31,8 +32,7 @@ pub async fn store_shop(
   let id = state.db.generate_id()?;
   param.id = id;
 
-  let shop_as_bytes = rkyv::to_bytes::<_, 128>(&param)?;
-  state.shop_db.insert(id.as_bytes(), &*shop_as_bytes)?;
+  <sled::Tree as RawRkyvStore<Shop, 256>>::store_unlisted(&state.shop_db, id, &param)?;
 
   state.create_acl::<Shop, User>(id, user_id)?;
 

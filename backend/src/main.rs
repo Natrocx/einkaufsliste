@@ -4,7 +4,6 @@
 #![feature(try_trait_v2)]
 
 mod api;
-mod consts;
 pub mod db;
 pub mod response;
 mod util;

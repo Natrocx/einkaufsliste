@@ -1,7 +1,7 @@
 use actix_identity::Identity;
 use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
 use actix_web::{get, post, web};
-use einkaufsliste::model::article::Article;
+
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
@@ -35,11 +35,9 @@ pub async fn store_item_unattached(
   state: web::Data<DbState>,
   identity: Identity,
 ) -> Response {
-  let user_id = identity.parse()?;
+  let _user_id = identity.parse()?;
 
-  state.store_unlisted(item.id, &item)?;
-
-  state.create_acl::<Article, User>(item.id, user_id)?;
+  <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item.id, &item)?;
 
   Response::empty()
 }
@@ -57,7 +55,8 @@ pub async fn store_item_attached(
   param.item.id = item_id;
 
   // insert item
-  state.store_unlisted(item_id, &param.item)?;
+
+  <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item_id, &param.item)?;
 
   // TODO: rewrite
   state
@@ -149,7 +148,13 @@ pub(crate) async fn store_item_list(
   let id = state.db.generate_id()?;
 
   param.id = id;
-  state.store_listed(user_id, id, &param)?;
+  <DbState as ObjectStore<List, sled::Tree, 256>>::store_listed(
+    &state,
+    user_id,
+    id,
+    &state.list_db,
+    &param,
+  )?;
 
   state.create_acl::<List, User>(id, user_id)?;
 
