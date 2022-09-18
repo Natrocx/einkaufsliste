@@ -42,8 +42,8 @@ pub(crate) async fn register_v1(
     password: hashed_pw,
   };
 
-  // TODO: move to RkyvStore/DbState?
   <sled::Tree as RawRkyvStore<UserWithPassword, 128>>::store_unlisted(&data.user_db, id, &value)?;
+  // TODO: move to RkyvStore/DbState? - currently blocked by Identifiable definition
   data
     .login_db
     .insert(&parameter.name, &*rkyv::to_bytes::<_, 256>(&value)?)?;
@@ -61,7 +61,6 @@ pub(crate) async fn login_v1(
   state: web::Data<DbState>,
   request: HttpRequest,
 ) -> Response {
-  debug!("Vier");
   let id = state.check_password(&login_request)?;
 
   // remember user id for session

@@ -49,7 +49,6 @@ async fn main() -> std::io::Result<()> {
     login_db: db.open_tree("login")?,
     object_list_db: db.open_tree("ol")?,
     db,
-    //rng: Arc::new(Mutex::new(rand_xoshiro::Xoshiro256PlusPlus::from_entropy())),
   };
 
   let mut key = [0u8; 64];
