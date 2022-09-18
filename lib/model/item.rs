@@ -5,7 +5,7 @@ use super::article::Article;
 use super::Identifiable;
 
 #[derive(Archive, Serialize, Deserialize, Clone)]
-#[archive_attr(derive(bytecheck::CheckBytes))] //rkyv validation
+#[archive_attr(derive(bytecheck::CheckBytes))] 
 pub struct Item {
   pub id: <Item as Identifiable>::Id,
   pub checked: bool,

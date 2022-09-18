@@ -69,7 +69,7 @@ pub(crate) async fn login_v1(
   id.into()
 }
 
-#[allow(clippy::enum_variant_names)]// this is an error enum
+#[allow(clippy::enum_variant_names)] // this is an error enum
 #[derive(Debug)]
 pub enum PasswordValidationError {
   DbAccessError(sled::Error),

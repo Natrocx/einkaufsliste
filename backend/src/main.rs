@@ -8,10 +8,6 @@ pub mod db;
 pub mod response;
 mod util;
 
-use std::fmt::Display;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
 use std::time::Duration;
 
 use actix_identity::IdentityMiddleware;
@@ -25,8 +21,6 @@ use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
 use mimalloc::MiMalloc;
 use rand::Rng;
-use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::pkcs8_private_keys;
 
 // Use a reasonable global allocator to avoid performance problems due to rkyv serialization allocations
 #[global_allocator]
@@ -36,7 +30,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 async fn main() -> std::io::Result<()> {
   env_logger::init();
 
-  let config = load_rustls_config(Path::new("./cert.pem"), Path::new("./key.pem")).unwrap();
+  let config = util::config::load_config().unwrap();
 
   let db = sled::open("./data.sled")?;
   let application_state = DbState {
@@ -59,7 +53,7 @@ async fn main() -> std::io::Result<()> {
   HttpServer::new(move || {
     let cors_config = actix_cors::Cors::permissive();
     let identity_mw = IdentityMiddleware::builder()
-      .visit_deadline(Some(Duration::from_secs(60 * 60 * 24 * 30)))
+      .visit_deadline(Some(Duration::from_secs(config.cookie_timeout)))
       .logout_behaviour(actix_identity::config::LogoutBehaviour::PurgeSession)
       .build();
 
@@ -84,64 +78,7 @@ async fn main() -> std::io::Result<()> {
         cookie_priv_key.clone(),
       ))
   })
-  .bind_rustls("127.0.0.1:8443", config)?
+  .bind_rustls("127.0.0.1:8443", config.tls_config)?
   .run()
   .await
-}
-
-fn load_rustls_config(
-  cert_path: &Path,
-  key_path: &Path,
-) -> Result<rustls::ServerConfig, TlsInitError> {
-  // init server config builder with safe defaults
-  let config = ServerConfig::builder()
-    .with_safe_defaults()
-    .with_no_client_auth();
-
-  // load TLS key/cert files
-  let cert_file =
-    &mut BufReader::new(File::open(cert_path).map_err(TlsInitError::ReadingParameterPaths)?);
-  let key_file =
-    &mut BufReader::new(File::open(key_path).map_err(TlsInitError::ReadingParameterPaths)?);
-
-  // convert files to key/cert objects
-  let cert_chain = rustls_pemfile::certs(cert_file)
-    .map_err(TlsInitError::BuildingChain)?
-    .into_iter()
-    .map(Certificate)
-    .collect();
-  let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
-    .map_err(TlsInitError::BuildingChain)?
-    .into_iter()
-    .map(PrivateKey)
-    .collect();
-
-  // exit if no keys could be parsed
-  if keys.is_empty() {
-    eprintln!("Could not locate PKCS 8 private keys.");
-    Err(TlsInitError::MissingKeys)
-  } else {
-    Ok(config.with_single_cert(cert_chain, keys.remove(0)).unwrap())
-  }
-}
-
-#[derive(Debug)]
-enum TlsInitError {
-  ReadingParameterPaths(std::io::Error),
-  BuildingChain(std::io::Error),
-  MissingKeys,
-}
-
-impl Display for TlsInitError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let error_message = match self {
-      Self::ReadingParameterPaths(e) => {
-        format!("Could not access files at the provided path: {}", e)
-      }
-      TlsInitError::BuildingChain(e) => format!("An Error occurred while building Keychain: {}", e),
-      TlsInitError::MissingKeys => "Missing PEM files".to_owned(),
-    };
-
-    write!(f, "{}", error_message)
-  }
 }

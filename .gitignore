@@ -8,6 +8,7 @@
 # ignore working files
 **/data.sled
 **/sessions.sled
+**/backend.toml
 **/*.pem
 
 frontend/bower_components/**
