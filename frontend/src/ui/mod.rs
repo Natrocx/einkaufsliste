@@ -1,22 +1,21 @@
-use std::rc::Rc;
 use std::sync::Arc;
 
-use einkaufsliste::model::item::{Item, Unit};
+use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::RegisterUserV1;
+use einkaufsliste::model::user::{ObjectList, UsersObjectLists};
 use einkaufsliste::model::Identifiable;
 use gloo_timers::future::TimeoutFuture;
 use log::info;
-use web_sys::{HtmlDivElement, HtmlElement, Node};
+use web_sys::{HtmlDivElement, HtmlElement};
 use yew::{html, Callback, Component, Html, NodeRef, Properties};
 use yew_router::prelude::*;
 
+use self::auth::AuthMessage;
 use self::list::{InnerListMessage, ListMessage};
 use crate::service::api::{self, APIService};
-use crate::ui::auth::LoginView;
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
-use crate::TransmissionError;
 
 mod auth;
 mod consts;
@@ -58,7 +57,7 @@ impl Component for App {
 
   type Properties = ();
 
-  fn create(ctx: &yew::Context<Self>) -> Self {
+  fn create(_ctx: &yew::Context<Self>) -> Self {
     Self {
       logged_in: false,
       error_node_ref: Default::default(),
@@ -68,12 +67,9 @@ impl Component for App {
   }
 
   fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
-    let props = ListProperties {
-      api_service: self.api_service.clone(),
-      id: 0,
-    };
     let api_service = self.api_service.clone();
 
+    let error_callback = ctx.link().callback(|message: AppMessage| message);
     html! {
       <div>
         <div class="header">
@@ -81,7 +77,7 @@ impl Component for App {
         </div>
 
         <BrowserRouter>
-          <Switch<Page> render={ Switch::render(move |route| { switch(route, api_service.clone())}) } />
+          <Switch<Page> render={ Switch::render(move |route| { switch(route, api_service.clone(), error_callback.clone())}) } />
         </BrowserRouter>
 
         <div class="error-container">
@@ -135,10 +131,17 @@ impl App {
   }
 }
 
-fn switch(route: &Page, api_service: Arc<APIService>) -> Html {
+fn switch(route: &Page, api_service: Arc<APIService>, error_callback: Callback<AppMessage>) -> Html {
   match route {
     Page::Overview => html!(<HomePage api_service={api_service}/>),
-    Page::List { name: _, id } => html! {<ListView id={*id} api_service={api_service} />}, /* TODO: replace clone? */
+    Page::List { name: _, id } => {
+      let props = ListProperties {
+        api_service,
+        id: *id,
+        error_callback,
+      };
+      html! {<ListView ..props />}
+    } /* TODO: replace clone? */
     Page::Settings => todo!(),
     Page::NotFound => html! {
       <h1>{"There is no such resource."}</h1>
@@ -173,28 +176,36 @@ impl PartialEq for HomePageProperties {
   }
 }
 
+pub enum HomePageMessage {
+  Success(ObjectList),
+  Error(String),
+}
+
 impl Component for HomePage {
-  type Message = ();
+  type Message = HomePageMessage;
 
   type Properties = HomePageProperties;
 
-  fn create(ctx: &yew::Context<Self>) -> Self {
+  fn create(_ctx: &yew::Context<Self>) -> Self {
     Self {
       lists: vec![],
       loaded_lists: false,
     }
   }
 
+  #[allow(clippy::let_unit_value)]
   fn view(&self, ctx: &yew::Context<Self>) -> Html {
     if !self.loaded_lists {
-      let api_service = ctx.props().api_service.as_ref();
-      return html! {
+      let api_service = ctx.props().api_service.clone();
+      ctx.link().send_future(get_uses_lists_callback(api_service));
+
+      html! {
         <div class="list-loading">
           <CircularLoadingIndicator />
         </div>
-      };
+      }
     } else {
-      return html! {};
+      html! {}
     }
   }
 }
@@ -212,7 +223,7 @@ impl Component for ListPreView {
 
   type Properties = ListPreviewProperties;
 
-  fn create(ctx: &yew::Context<Self>) -> Self {
+  fn create(_ctx: &yew::Context<Self>) -> Self {
     Self {}
   }
 
@@ -233,7 +244,7 @@ impl Component for ListPreView {
 async fn fetch_callback((id, api_service): (<Item as Identifiable>::Id, Arc<APIService>)) -> ListMessage {
   match api_service.get_flat_items_list(id).await {
     Ok(val) => ListMessage::FetchSuccessful(val),
-    Err(e) => ListMessage::Error(e.to_string()),
+    Err(e) => ListMessage::FetchUnsuccessful(e.to_string()),
   }
 }
 
@@ -257,9 +268,16 @@ async fn login_callback((name, pw, api_service): (String, String, Arc<APIService
 }
 
 /// Wrapper function for use with yew. Will panic if the request fails
-async fn register_callback((name, pw, api_service): (String, String, Arc<APIService>)) -> () {
+async fn register_callback((name, pw, api_service): (String, String, Arc<APIService>)) -> AuthMessage {
   api_service
     .register_v1(&RegisterUserV1 { name, password: pw })
     .await
-    .unwrap();
+    .map_err(|e| e.to_string())
+}
+
+async fn get_uses_lists_callback(api_service: Arc<APIService>) -> HomePageMessage {
+  match api_service.get_users_lists().await {
+    Ok(val) => HomePageMessage::Success(val),
+    Err(reason) => HomePageMessage::Error(reason.to_string()),
+  }
 }

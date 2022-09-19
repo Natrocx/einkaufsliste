@@ -159,7 +159,8 @@ impl Component for ListItemView {
 #[derive(Properties, Clone)]
 pub struct ListProperties {
   pub(crate) api_service: Arc<APIService>,
-  pub(crate) id: <List as Identifiable>::Id,
+  pub(crate) id: u64,
+  pub(crate) error_callback: Callback<AppMessage>,
 }
 
 impl PartialEq for ListProperties {
@@ -174,6 +175,7 @@ pub struct InnerListView {}
 pub struct InnerListProperties {
   list: FlatItemsList,
   api_service: Arc<APIService>,
+  error_callback: Callback<AppMessage>,
 }
 
 impl PartialEq for InnerListProperties {
@@ -192,7 +194,7 @@ impl Component for InnerListView {
 
   type Properties = InnerListProperties;
 
-  fn create(ctx: &Context<Self>) -> Self {
+  fn create(_ctx: &Context<Self>) -> Self {
     Self {}
   }
 
@@ -219,21 +221,13 @@ impl Component for InnerListView {
     match msg {
       InnerListMessage::NOOP => false,
       InnerListMessage::Error(message) => {
-        ctx
-          .link()
-          .get_parent()
-          .cloned()
-          .unwrap()
-          .downcast::<ListView>()
-          .send_message(ListMessage::Error(message));
+        ctx.props().error_callback.emit(AppMessage::Error(message));
         false
       }
     }
   }
 }
 pub enum ListMessage {
-  /// Variant for passing child-errors
-  Error(String),
   FetchSuccessful(FlatItemsList),
   FetchUnsuccessful(String),
 }
@@ -259,12 +253,13 @@ impl Component for ListView {
     }
   }
 
+  #[allow(clippy::let_unit_value)]
   fn view(&self, ctx: &Context<Self>) -> Html {
     html! {
       {
         if self.fetch_finished {
           if self.list.is_some() {
-            let props = InnerListProperties { list: self.list.clone().unwrap(), api_service: ctx.props().api_service.clone() };
+            let props = InnerListProperties { list: self.list.clone().unwrap(), api_service: ctx.props().api_service.clone(), error_callback: ctx.props().error_callback.clone() };
             html! {
               <div>
                 <InnerListView ..props />
@@ -293,16 +288,6 @@ impl Component for ListView {
 
   fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
     match msg {
-      ListMessage::Error(message) => {
-        ctx
-          .link()
-          .get_parent()
-          .cloned()
-          .unwrap()
-          .downcast::<App>() // FIXME: Do this right
-          .send_message(AppMessage::Error(message));
-        false
-      }
       ListMessage::FetchSuccessful(list) => {
         self.fetch_finished = true;
         self.list = Some(list);
@@ -310,11 +295,11 @@ impl Component for ListView {
       }
       ListMessage::FetchUnsuccessful(message) => {
         self.fetch_finished = true;
-        self.update(ctx, ListMessage::Error(message)); // also invoke the Error(message) branch
+        ctx.props().error_callback.emit(AppMessage::Error(message));
         true
       }
     }
   }
 
-  fn destroy(&mut self, ctx: &Context<Self>) {}
+  fn destroy(&mut self, _ctx: &Context<Self>) {}
 }

@@ -357,7 +357,7 @@ impl APIService {
     }
   }
 
-  pub async fn get_users_lists(&self, user: &User) -> Result<ObjectList, TransmissionError> {
+  pub async fn get_users_lists(&self) -> Result<ObjectList, TransmissionError> {
     let url = format!("{}/user/lists", self.base_url);
 
     let response = self.http_client.lock().await.get(&url).send().await?;

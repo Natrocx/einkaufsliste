@@ -18,4 +18,5 @@ impl Identifiable for Article {
   type Id = u64;
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(Article);

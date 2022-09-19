@@ -22,11 +22,11 @@ impl Component for CircularLoadingIndicator {
   type Message = ();
   type Properties = ();
 
-  fn create(ctx: &yew::Context<Self>) -> Self {
+  fn create(_ctx: &yew::Context<Self>) -> Self {
     Self
   }
 
-  fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
+  fn view(&self, _ctx: &yew::Context<Self>) -> yew::Html {
     html! {
         <div class="circular-loading-indicator">
           {"Loading"}

@@ -124,7 +124,7 @@ mod api_tests {
       );
 
       println!("------------------ GET /user/lists --------------");
-      assert!(api_service.get_users_lists(&user).await.unwrap().list.len() == 1);
+      assert!(api_service.get_users_lists().await.unwrap().list.len() == 1);
       println!("Success");
 
       println!("------------------ POST /shop ----------------");

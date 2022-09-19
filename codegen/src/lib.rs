@@ -7,7 +7,6 @@ A blanket implementation is typically not possible due to orphaning restrictions
 #[allow(clippy::crate_in_macro_def)] // intended behaviour due to trait impl restrictions
 macro_rules! impl_from_request {
   ($param:ty) => {
-    #[cfg(feature = "backend")]
     impl actix_web::FromRequest for $param {
       type Error = ::actix_web::Error;
 

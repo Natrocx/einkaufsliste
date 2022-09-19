@@ -5,7 +5,7 @@ use super::article::Article;
 use super::Identifiable;
 
 #[derive(Archive, Serialize, Deserialize, Clone)]
-#[archive_attr(derive(bytecheck::CheckBytes))] 
+#[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Item {
   pub id: <Item as Identifiable>::Id,
   pub checked: bool,
@@ -15,6 +15,7 @@ pub struct Item {
   pub article_id: Option<<Article as Identifiable>::Id>,
   pub alternative_article_ids: Option<Vec<<Article as Identifiable>::Id>>,
 }
+#[cfg(feature = "backend")]
 impl_from_request!(Item);
 
 #[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone)]

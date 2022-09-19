@@ -15,6 +15,7 @@ pub struct List {
   pub items: Vec<<Item as Identifiable>::Id>,
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(List);
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
@@ -27,6 +28,7 @@ pub struct FlatItemsList {
   pub items: Vec<Item>,
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(FlatItemsList);
 
 impl FlatItemsList {

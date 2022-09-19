@@ -11,6 +11,7 @@ pub struct StoreItemAttached {
   pub list_id: u64,
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(StoreItemAttached);
 
 #[derive(Archive, Serialize, Deserialize)]
@@ -20,6 +21,7 @@ pub struct RegisterUserV1 {
   pub password: String,
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(RegisterUserV1);
 
 #[derive(Archive, Serialize, Deserialize)]
@@ -29,4 +31,5 @@ pub struct LoginUserV1 {
   pub password: String,
 }
 
+#[cfg(feature = "backend")]
 impl_from_request!(LoginUserV1);
