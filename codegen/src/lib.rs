@@ -1,40 +1,33 @@
-/**
-Implement the [`actix_web::FromRequest`] trait for any type serializable with `rkyv::from_bytes`. The entire payload has to be processed in one "transaction" (using this extractor will prevent you from using other extractors operating on the payload).
+use derive_routable::routable_derive_impl;
+use syn::parse_macro_input;
 
-A blanket implementation is typically not possible due to orphaning restrictions. Use this macro to manually create a monomorphised implementation.
-*/
-#[macro_export]
-#[allow(clippy::crate_in_macro_def)] // intended behaviour due to trait impl restrictions
-macro_rules! impl_from_request {
-  ($param:ty) => {
-    impl actix_web::FromRequest for $param {
-      type Error = ::actix_web::Error;
+mod derive_routable;
 
-      type Future = ::futures::future::LocalBoxFuture<'static, std::result::Result<Self, Self::Error>>;
 
-      fn from_request(req: &::actix_web::HttpRequest, payload: &mut ::actix_web::dev::Payload) -> Self::Future {
-        let payload = payload.take();
 
-        Box::pin(async move {
-          let bytes = match crate::util::collect_from_payload(payload).await {
-            Ok(val) => val,
-            Err(e) => {
-              ::log::debug!("Rejecting request due to error while collecting from actix_web Payload: {e}");
-              return Err(::actix_web::error::ErrorInternalServerError(e.to_string()));
-            }
-          };
-
-          let val = match ::rkyv::from_bytes::<$param>(&*bytes) {
-            Ok(val) => val,
-            Err(e) => {
-              ::log::debug!("Rejecting request due to error parsing archived bytes: {e}");
-              return Err(::actix_web::error::ErrorBadRequest(e.to_string()));
-            }
-          };
-
-          Ok(val)
-        })
-      }
-    }
-  };
+/// Derive macro used to mark an enum as Routable.
+///
+/// This macro can only be used on enums. Every varient of the macro needs to be marked
+/// with the `at` attribute to specify the URL of the route. It generates an implementation of
+///  `yew_router::Routable` trait and `const`s for the routes passed which are used with `Route`
+/// component.
+///
+/// # Example
+///
+/// ```
+/// # use yew_router::Routable;
+/// #[derive(Debug, Clone, Copy, PartialEq, Routable)]
+/// enum Routes {
+///   #[at("/")]
+///   Home,
+///   #[at("/secure")]
+///   Secure,
+///   #[at("/404")]
+///   NotFound,
+/// }
+/// ```
+#[proc_macro_derive(Routable, attributes(at, not_found))]
+pub fn derive_routable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+  let input = parse_macro_input!(input as crate::derive_routable::Routable);
+  routable_derive_impl(input).into()
 }

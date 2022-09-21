@@ -15,8 +15,12 @@ fn main() {
 }
 
 fn build_frontend(args: &Args) {
+  let current_dir = std::env::current_dir().unwrap();
+  let current_dir = current_dir.to_string_lossy();
+
   let mut command = std::process::Command::new("trunk");
-  command.args(["build", "--package", "frontend"]);
+  command.arg("build").current_dir(format!("{current_dir}/frontend"));
+
   // if the backend is built in release mode, we also want to build the frontend in release mode
   if args.optimize {
     command.arg("--release");
@@ -45,7 +49,13 @@ fn copy_files_to_webroot() {
         format!("{current_dir}/backend/web_root/{}", file.file_name().to_string_lossy()),
       )
       .unwrap();
-    })
+    });
+
+  std::fs::copy(
+    format!("{current_dir}/frontend/assets/favicon.svg"),
+    format! {"{current_dir}/backend/web_root/favicon.svg"},
+  )
+  .unwrap();
 }
 
 fn build_backend(args: &Args) {

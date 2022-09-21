@@ -1,5 +1,6 @@
-use einkaufsliste_codegen::impl_from_request;
 use rkyv::{Archive, Deserialize, Serialize};
+
+use crate::impl_from_request;
 
 use super::article::Article;
 use super::Identifiable;
