@@ -8,6 +8,7 @@ Implement the [`actix_web::FromRequest`] trait for any type serializable with `r
 A blanket generic implementation is typically not possible due to orphaning restrictions. Use this macro to manually create a monomorphised implementation.
 */
 #[macro_export]
+#[cfg(feature = "backend")]
 #[allow(clippy::crate_in_macro_def)] // intended behaviour due to trait impl restrictions
 macro_rules! impl_from_request {
   ($param:ty) => {
@@ -16,7 +17,7 @@ macro_rules! impl_from_request {
 
       type Future = ::futures::future::LocalBoxFuture<'static, std::result::Result<Self, Self::Error>>;
 
-      fn from_request(req: &::actix_web::HttpRequest, payload: &mut ::actix_web::dev::Payload) -> Self::Future {
+      fn from_request(_req: &::actix_web::HttpRequest, payload: &mut ::actix_web::dev::Payload) -> Self::Future {
         let payload = payload.take();
 
         Box::pin(async move {

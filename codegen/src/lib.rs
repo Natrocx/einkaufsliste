@@ -3,8 +3,6 @@ use syn::parse_macro_input;
 
 mod derive_routable;
 
-
-
 /// Derive macro used to mark an enum as Routable.
 ///
 /// This macro can only be used on enums. Every varient of the macro needs to be marked

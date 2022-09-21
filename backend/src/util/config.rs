@@ -2,12 +2,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::BufReader;
 
-use actix_cors::{Cors, CorsMiddleware};
+use actix_cors::Cors;
 use config::Config;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
-
-use crate::api::user;
 
 #[derive(Clone)]
 pub(crate) struct BackendConfig {
@@ -33,7 +31,7 @@ impl BackendConfig {
 }
 
 pub(crate) fn load_config() -> Result<BackendConfig, LoadConfigError> {
-  let home_dir = std::env::var("HOME").unwrap_or_else (|_|"~/".into());
+  let home_dir = std::env::var("HOME").unwrap_or_else(|_| "~/".into());
 
   let user_settings = Config::builder();
 
@@ -137,10 +135,10 @@ impl Display for LoadConfigError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let error_message = match self {
       LoadConfigError::ReadingParameterPaths(e) => {
-        format!("Could not access files at the provided path: {}", e)
+        format!("Could not access files at the provided path: {e}")
       }
       LoadConfigError::BuildingChain(e) => {
-        format!("An Error occurred while building Keychain: {}", e)
+        format!("An Error occurred while building Keychain: {e}")
       }
       LoadConfigError::MissingKeys => "Missing PEM files".to_owned(),
       LoadConfigError::MissingAllConfigFiles => "No config files were found in the standard \
@@ -153,6 +151,6 @@ impl Display for LoadConfigError {
         .into(),
     };
 
-    write!(f, "{}", error_message)
+    write!(f, "{error_message}")
   }
 }

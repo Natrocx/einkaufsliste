@@ -1,9 +1,9 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::impl_from_request;
-
 use super::shop::Shop;
 use super::Identifiable;
+#[cfg(feature = "backend")]
+use crate::impl_from_request;
 
 #[derive(Archive, Serialize, Deserialize, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]

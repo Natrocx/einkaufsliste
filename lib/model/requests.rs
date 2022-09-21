@@ -1,8 +1,8 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::impl_from_request;
-
 use super::item::Item;
+#[cfg(feature = "backend")]
+use crate::impl_from_request;
 
 /// Command-pattern based structs to be used as request parameters
 #[derive(Archive, Serialize, Deserialize)]

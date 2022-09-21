@@ -7,26 +7,19 @@ mod api;
 pub mod db;
 pub mod response;
 mod util;
-mod serve_frontend;
 
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
 
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
-use actix_web::http::header::ContentType;
-use actix_web::{get, HttpServer, Responder};
+use actix_web::HttpServer;
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
 use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
 use mimalloc::MiMalloc;
-use mime::Mime;
 use rand::Rng;
-
-use crate::response::ResponseError;
 
 // Use a reasonable global allocator to avoid performance problems due to rkyv serialization allocations
 #[global_allocator]
@@ -78,7 +71,7 @@ async fn main() -> std::io::Result<()> {
       .service(get_users_lists);
 
     #[cfg(feature = "serve_frontend")]
-    let app = { app.service(crate::serve_frontend::serve_frontend) };
+    let app = { app.service(crate::util::serve_frontend::serve_frontend) };
 
     app
       .wrap(cors)
