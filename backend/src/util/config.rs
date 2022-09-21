@@ -2,17 +2,38 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::BufReader;
 
+use actix_cors::{Cors, CorsMiddleware};
 use config::Config;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
 
+use crate::api::user;
+
+#[derive(Clone)]
 pub(crate) struct BackendConfig {
   pub tls_config: ServerConfig,
   pub cookie_timeout: u64,
+  pub cors: Option<String>,
+}
+
+impl BackendConfig {
+  pub fn extract_cors(&self) -> Cors {
+    self
+      .cors
+      .clone()
+      .map(|url| actix_cors::Cors::default().allowed_origin(&url))
+      .unwrap_or_else(|| {
+        log::warn!(
+          "Could not find a frontend url in the backend configuration. Attempting to run in \
+           restrictive Cors mode. This is likely to fail."
+        );
+        actix_cors::Cors::default()
+      })
+  }
 }
 
 pub(crate) fn load_config() -> Result<BackendConfig, LoadConfigError> {
-  let home_dir = std::env::var("HOME").unwrap_or("~/".into());
+  let home_dir = std::env::var("HOME").unwrap_or_else (|_|"~/".into());
 
   let user_settings = Config::builder();
 
@@ -40,6 +61,8 @@ pub(crate) fn load_config() -> Result<BackendConfig, LoadConfigError> {
     .try_deserialize::<HashMap<String, String>>()
     .expect("Could not load configuration files. Refusing to operate.");
 
+  let cors = user_settings.get("frontend_url").cloned();
+
   let cert_path = user_settings
     .get("cert_path")
     .expect("Did not specify path to TLS certificate.");
@@ -53,6 +76,7 @@ pub(crate) fn load_config() -> Result<BackendConfig, LoadConfigError> {
   )?;
 
   Ok(BackendConfig {
+    cors,
     tls_config: server_config,
     cookie_timeout: user_settings
       .get("cookie_timeout")

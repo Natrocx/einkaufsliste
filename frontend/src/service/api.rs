@@ -94,8 +94,6 @@ pub struct APIService {
 impl APIService {
   pub fn new(base_url: &'static str) -> Result<APIService, APIServiceInitializationError> {
     let client = reqwest::ClientBuilder::new()
-      //.cookie_store(true)
-      //.https_only(true)
       .build()
       .map_err(|_| APIServiceInitializationError::BuildingClient)?;
 

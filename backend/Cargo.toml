@@ -6,6 +6,7 @@ edition = "2021"
 license = "AGPL-3.0"
 
 [dependencies]
+# Fuck openssl, always breaking builds
 actix-web = { version = "4.2.1", features = ["rustls", "secure-cookies"] }
 bytecheck = "0.6.9"
 bytes = "1.2.1"
@@ -35,3 +36,9 @@ byteorder = "1.4.3"
 anyhow = "1.0.65"
 async-trait = "0.1.57"
 config = { version = "0.13.2", default-features = false, features = ["toml"] }
+actix-files = { version = "0.6.2", optional = true }
+mime = "0.3.16"
+
+[features]
+default = []
+serve_frontend = ["actix-files"]

@@ -13,7 +13,7 @@ pub(super) struct LoginView;
 #[derive(Properties)]
 pub(super) struct AuthProperties {
   pub api_service: Arc<APIService>,
-  pub error_callback: Callback<AppMessage>,
+  pub callback: Callback<Result<u64, String>>,
 }
 
 impl PartialEq for AuthProperties {
@@ -40,18 +40,12 @@ impl Component for LoginView {
     let _pw_ref = pw_ref.clone();
     let api_service = ctx.props().api_service.clone(); // double clone for the win... (the compiler will complain for whatever reason if we dont clone the Arc here)
 
-    let callback = ctx
-      .link()
-      .get_parent()
-      .cloned()
-      .unwrap()
-      .downcast::<App>() // TODO: is there a better way to do this?
-      .callback_future(move |_| {
-        let name = _name_ref.cast::<HtmlInputElement>().unwrap().value();
-        let pw = _pw_ref.cast::<HtmlInputElement>().unwrap().value();
+    let callback = ctx.link().callback_future(move |_| {
+      let name = _name_ref.cast::<HtmlInputElement>().unwrap().value();
+      let pw = _pw_ref.cast::<HtmlInputElement>().unwrap().value();
 
-        login_callback((name, pw, api_service.clone()))
-      });
+      login_callback((name, pw, api_service.clone()))
+    });
 
     let _name_ref = name_ref.clone();
     let _pw_ref = pw_ref.clone();
@@ -82,13 +76,11 @@ impl Component for LoginView {
   fn update(&mut self, _ctx: &yew::Context<Self>, msg: Self::Message) -> bool {
     match msg {
       Ok(user_id) => {
-        // TODO: save user_id?
-        let history = _ctx.link().history().unwrap();
-        history.go(-1);
+        _ctx.props().callback.emit(Ok(user_id));
         false
       }
       Err(reason) => {
-        _ctx.props().error_callback.emit(AppMessage::Error(reason));
+        _ctx.props().callback.emit(Err(reason));
         false
       }
     }

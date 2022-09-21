@@ -307,7 +307,7 @@ pub trait RawRkyvStore<
   fn store_unlisted(&self, id: u64, value: &T) -> Result<Option<sled::IVec>, ResponseError>;
 
   /// # Safety
-  /// You must manually ensure, that objects in the tree represent an archive of the generic type
+  /// You must manually ensure, that objects in the tree represent an archive of the generic type.
   /// Calling this with the wrong generic type should be an easy catch through unit testing.
   unsafe fn get_unchecked(&self, id: u64) -> Result<T, ResponseError>;
 }

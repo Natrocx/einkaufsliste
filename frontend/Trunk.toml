@@ -1,0 +1,4 @@
+[build]
+public_url = "/dev/"
+dist = "dist"
+filehash = false
