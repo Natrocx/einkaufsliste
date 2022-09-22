@@ -24,7 +24,7 @@ mod derive_routable;
 ///   NotFound,
 /// }
 /// ```
-#[proc_macro_derive(Routable, attributes(at, not_found))]
+#[proc_macro_derive(Routable, attributes(at, not_found, route_prefix))]
 pub fn derive_routable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
   let input = parse_macro_input!(input as crate::derive_routable::Routable);
   routable_derive_impl(input).into()

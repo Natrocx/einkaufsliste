@@ -5,15 +5,16 @@ use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::RegisterUserV1;
 use einkaufsliste::model::user::{ObjectList, UsersObjectLists};
 use einkaufsliste::model::Identifiable;
+use einkaufsliste_codegen::Routable;
 use gloo_timers::future::TimeoutFuture;
 use log::info;
 use web_sys::{HtmlDivElement, HtmlElement};
 use yew::{html, Callback, Component, Html, NodeRef, Properties};
-use yew_router::prelude::*;
+use yew_router::{BrowserRouter, Switch};
 
 use self::auth::*;
 use self::list::{InnerListMessage, ListMessage};
-use crate::service::api::{self, APIService};
+use crate::{service::api::{self, APIService}, util::routing::Page};
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
 
@@ -21,22 +22,6 @@ mod auth;
 mod consts;
 mod list;
 mod util;
-
-#[derive(Clone, Routable, PartialEq)]
-pub enum Page {
-  #[at("/")]
-  Overview,
-  #[at("/list/:id/:name")]
-  List {
-    id: <List as Identifiable>::Id,
-    name: String,
-  },
-  #[at("/settings")]
-  Settings,
-  #[not_found]
-  #[at("/404")]
-  NotFound,
-}
 
 pub struct App {
   logged_in: bool,

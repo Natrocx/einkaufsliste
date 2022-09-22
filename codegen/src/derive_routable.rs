@@ -3,21 +3,24 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{Data, DeriveInput, Fields, Ident, LitStr, Variant};
+use syn::{Attribute, Data, DeriveInput, Fields, Ident, Lit, LitStr, Meta, Variant};
 
 const AT_ATTR_IDENT: &str = "at";
 const NOT_FOUND_ATTR_IDENT: &str = "not_found";
 
+const ROUTE_PREFIX_ATTR_IDENT: &str = "route_prefix";
+
 pub struct Routable {
   ident: Ident,
-  ats: Vec<LitStr>,
+  at_attribute_params: Vec<LitStr>,
   variants: Punctuated<Variant, syn::token::Comma>,
   not_found_route: Option<Ident>,
 }
 
+/// Copied 1 to 1 from yew-router
 impl Parse for Routable {
   fn parse(input: ParseStream) -> syn::Result<Self> {
-    let DeriveInput { ident, data, .. } = input.parse()?;
+    let DeriveInput { ident, data, attrs, .. } = input.parse()?;
 
     let data = match data {
       Data::Enum(data) => data,
@@ -25,24 +28,28 @@ impl Parse for Routable {
       Data::Union(u) => return Err(syn::Error::new(u.union_token.span(), "expected enum, found union")),
     };
 
-    let (not_found_route, ats) = parse_variants_attributes(&data.variants)?;
+    let prefix = parse_struct_attrs(&attrs)?;
+
+    let (not_found_route, ats) = parse_variants_attributes(&data.variants, prefix)?;
 
     Ok(Self {
       ident,
       variants: data.variants,
-      ats,
+      at_attribute_params: ats,
       not_found_route,
     })
   }
 }
 
+// Adapted from yew_router 0.16
 fn parse_variants_attributes(
   variants: &Punctuated<Variant, syn::token::Comma>,
+  prefix: Option<LitStr>,
 ) -> syn::Result<(Option<Ident>, Vec<LitStr>)> {
   let mut not_founds = vec![];
-  let mut ats: Vec<LitStr> = vec![];
+  let mut at_attribute_params: Vec<LitStr> = vec![];
 
-  let mut not_found_attrs = vec![];
+  let mut not_found_attributes = vec![];
 
   for variant in variants.iter() {
     if let Fields::Unnamed(ref field) = variant.fields {
@@ -74,6 +81,7 @@ fn parse_variants_attributes(
     let lit = attr.parse_args::<LitStr>()?;
     let val = lit.value();
 
+    // handle exceptions regarding URI formation
     if val.find('#').is_some() {
       return Err(syn::Error::new_spanned(
         lit,
@@ -81,18 +89,26 @@ fn parse_variants_attributes(
       ));
     }
 
-    if !val.starts_with('/') {
+    //TODO: param over prefix
+    if !val.starts_with('/') && prefix.is_none() {
       return Err(syn::Error::new_spanned(
         lit,
-        "relative paths are not supported at this moment.",
+        format!(
+          "relative paths are not supported at this moment (without a prefix). If you meant to use a prefix, consider \
+           using the {ROUTE_PREFIX_ATTR_IDENT} attribute macro."
+        ),
       ));
     }
 
-    ats.push(lit);
+    let lit = match prefix {
+      Some(ref prefix) => LitStr::new(&format!("{}{val}", &prefix.value()), lit.span()),
+      None => lit,
+    };
+    at_attribute_params.push(lit);
 
     for attr in attrs.iter() {
       if attr.path.is_ident(NOT_FOUND_ATTR_IDENT) {
-        not_found_attrs.push(attr);
+        not_found_attributes.push(attr);
         not_founds.push(variant.ident.clone())
       }
     }
@@ -100,12 +116,12 @@ fn parse_variants_attributes(
 
   if not_founds.len() > 1 {
     return Err(syn::Error::new_spanned(
-      quote! { #(#not_found_attrs)* },
+      quote! { #(#not_found_attributes)* },
       format!("there can only be one {}", NOT_FOUND_ATTR_IDENT),
     ));
   }
 
-  Ok((not_founds.into_iter().next(), ats))
+  Ok((not_founds.into_iter().next(), at_attribute_params))
 }
 
 impl Routable {
@@ -124,7 +140,7 @@ impl Routable {
         Fields::Unnamed(_) => unreachable!(), // already checked
       };
 
-      let left = self.ats.get(i).unwrap();
+      let left = self.at_attribute_params.get(i).unwrap();
       quote! {
           #left => ::std::option::Option::Some(#right)
       }
@@ -143,7 +159,7 @@ impl Routable {
   fn build_to_path(&self) -> TokenStream {
     let to_path_matches = self.variants.iter().enumerate().map(|(i, variant)| {
       let ident = &variant.ident;
-      let mut right = self.ats.get(i).unwrap().value();
+      let mut right = self.at_attribute_params.get(i).unwrap().value();
 
       match &variant.fields {
         Fields::Unit => quote! { Self::#ident => ::std::string::ToString::to_string(#right) },
@@ -182,7 +198,7 @@ impl Routable {
 
 pub fn routable_derive_impl(input: Routable) -> TokenStream {
   let Routable {
-    ats,
+    at_attribute_params: ats,
     not_found_route,
     ident,
     ..
@@ -232,5 +248,57 @@ pub fn routable_derive_impl(input: Routable) -> TokenStream {
       }
 
       #maybe_default
+  }
+}
+
+/**
+Parse attributes tagged on the entire struct. Currently this implements the following:
+
+  * Determines prefix for URLs (for Router nesting/not placing the page under the web_root i.e. serving from sub-URIs like `/dev/`). This explicitly serves the purpose of allowing the frontend to be served by the backend as a development environment.
+ */
+pub fn parse_struct_attrs(attrs: &[Attribute]) -> syn::Result<Option<LitStr>> {
+  let full_attribute = attrs
+    .iter()
+    // we only consider outter attributes
+    .filter(|attr| match attr.style {
+      syn::AttrStyle::Outer => true,
+      syn::AttrStyle::Inner(_) => false,
+    })
+    .find_map(|attr| attr.path.is_ident(ROUTE_PREFIX_ATTR_IDENT).then(|| attr.parse_meta()));
+
+  match full_attribute {
+    // if the attribute is found and correctly formed:
+    Some(Ok(Meta::List(list))) => {
+      // TODO: recheck path? the rkyv auther does it, but I don't know why
+      let prefix = list
+        .nested
+        .first()
+        .map(|token| match token {
+          syn::NestedMeta::Lit(Lit::Str(literal)) => Ok(literal),
+          _ => Err(syn::Error::new(
+            token.span(),
+            " Unexpected token: Found an Identifier (meta). Expected a string literal.",
+          )),
+        })
+        .ok_or_else(|| syn::Error::new(list.span(), "You failed to specify a prefix. Exactly one is required."))??;
+
+      Ok(Some(prefix.to_owned()))
+    }
+    // else: differentiated error handling
+    Some(Ok(m)) => Err(syn::Error::new(
+      m.span(),
+      format!(
+        "Incorrect format for route_prefix attribute. You must specify the attribute in List format like so: \
+         #[{ROUTE_PREFIX_ATTR_IDENT}(\"/dev/\")]",
+      ),
+    )),
+    Some(Err(e)) => {
+      // the user entered a garbage tokentree and it cannot be parsed by syn, so we pass the error through
+      Err(e)
+    }
+    _ => {
+      // The user did not supply a route_prefix attribute
+      Ok(None)
+    }
   }
 }

@@ -3,6 +3,7 @@
 pub mod service;
 mod tests;
 pub mod ui;
+pub mod util;
 
 use std::fmt::Display;
 

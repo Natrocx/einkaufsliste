@@ -32,7 +32,12 @@ log = "0.4.17"
 console_log = { version = "0.2.0", features = ["color"] }
 gloo-timers = { version = "0.2.4", features = ["futures"] }
 yew-router = "0.16.0"
+einkaufsliste-codegen = { path = "../codegen" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
-rand ="*"
+rand = "*"
+
+[features]
+default = []
+dev_router = []
