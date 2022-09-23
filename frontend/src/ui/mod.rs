@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::list::FlatItemsList;
 use einkaufsliste::model::requests::RegisterUserV1;
 use einkaufsliste::model::user::ObjectList;
 use einkaufsliste::model::Identifiable;
@@ -229,7 +229,7 @@ impl Component for HomePage {
         for id in object_list.list {
           let api = ctx.props().api_service.clone();
           ctx.link().send_future(async move {
-            match api.get_flat_items_list(id.clone()).await {
+            match api.get_flat_items_list(id).await {
               Ok(list) => HomePageMessage::FlatListFetched(list),
               Err(e) => HomePageMessage::Error(e.to_string()),
             }
@@ -283,6 +283,7 @@ impl Component for ListPreView {
     Self {}
   }
 
+  #[allow(clippy::let_unit_value)]
   fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
     html! {
       <div class="list-preview-container">
@@ -323,7 +324,7 @@ async fn fetch_callback((id, api_service): (<Item as Identifiable>::Id, Arc<APIS
 /// Wrapper function for use with yew
 async fn change_name_callback((item, api_service): (Item, Arc<APIService>)) -> InnerListMessage {
   match api_service.update_item(&item).await {
-    Ok(_) => InnerListMessage::NOOP,
+    Ok(_) => InnerListMessage::Noop,
     Err(e) => InnerListMessage::Error(e.to_string()),
   }
 }
@@ -345,11 +346,4 @@ async fn register_callback((name, pw, api_service): (String, String, Arc<APIServ
     .register_v1(&RegisterUserV1 { name, password: pw })
     .await
     .map_err(|e| e.to_string())
-}
-
-async fn get_users_lists_callback(api_service: Arc<APIService>) -> HomePageMessage {
-  match api_service.get_users_lists().await {
-    Ok(val) => HomePageMessage::ObjectListFetched(val),
-    Err(reason) => HomePageMessage::Error(reason.to_string()),
-  }
 }

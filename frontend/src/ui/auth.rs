@@ -8,6 +8,7 @@ use crate::service::api::APIService;
 
 pub(super) struct LoginView;
 
+
 #[derive(Properties)]
 pub(super) struct AuthProperties {
   pub api_service: Arc<APIService>,

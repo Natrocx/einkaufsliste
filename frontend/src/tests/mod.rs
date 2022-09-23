@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod api_tests {
-  use einkaufsliste::model::user::User;
 
   #[test]
   fn test_requests() {
@@ -49,12 +48,6 @@ mod api_tests {
         .await
         .unwrap();
       println!("New user id: {user_id}");
-
-      let user = User {
-        id: user_id,
-        name: user_name.clone(),
-        profile_picture_id: None,
-      };
 
       println!("-------------- POST /login/v1 ----------------------");
       api_service

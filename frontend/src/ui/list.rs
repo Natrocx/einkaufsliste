@@ -1,20 +1,14 @@
-use std::ops::Index;
-use std::rc::Rc;
 use std::sync::Arc;
-use std::thread;
 
 use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::Identifiable;
-use futures::Future;
-use web_sys::{Element, HtmlElement, HtmlInputElement};
+use einkaufsliste::model::list::FlatItemsList;
+use web_sys::HtmlInputElement;
 use yew::prelude::*;
 
 use super::consts::*;
-use super::{change_name_callback, fetch_callback, App, AppMessage};
+use super::{change_name_callback, fetch_callback, AppMessage};
 use crate::service::api::APIService;
 use crate::ui::util::CircularLoadingIndicator;
-use crate::TransmissionError;
 
 #[derive(Default)]
 pub struct ListItemView {
@@ -153,7 +147,7 @@ impl Component for ListItemView {
     }
   }
 
-  fn destroy(&mut self, ctx: &Context<Self>) {}
+  fn destroy(&mut self, _ctx: &Context<Self>) {}
 }
 
 #[derive(Properties, Clone)]
@@ -185,7 +179,7 @@ impl PartialEq for InnerListProperties {
 }
 
 pub enum InnerListMessage {
-  NOOP,
+  Noop,
   Error(String),
 }
 
@@ -219,7 +213,7 @@ impl Component for InnerListView {
 
   fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
     match msg {
-      InnerListMessage::NOOP => false,
+      InnerListMessage::Noop => false,
       InnerListMessage::Error(message) => {
         ctx.props().error_callback.emit(AppMessage::Error(message));
         false

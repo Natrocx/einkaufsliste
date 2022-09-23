@@ -2,7 +2,6 @@ use std::fmt::Display;
 
 use actix_identity::Identity;
 use actix_web::dev::Extensions;
-use actix_web::error::ErrorInternalServerError;
 use actix_web::{self, get, post, web, HttpMessage, HttpRequest};
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
