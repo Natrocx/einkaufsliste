@@ -2,10 +2,8 @@ use std::sync::Arc;
 
 use web_sys::HtmlInputElement;
 use yew::{html, Callback, Component, NodeRef, Properties};
-use yew_router::prelude::History;
-use yew_router::scope_ext::RouterScopeExt;
 
-use super::{login_callback, register_callback, App, AppMessage};
+use super::{login_callback, register_callback};
 use crate::service::api::APIService;
 
 pub(super) struct LoginView;

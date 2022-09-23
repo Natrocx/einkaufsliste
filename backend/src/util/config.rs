@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::io::BufReader;
 
 use actix_cors::Cors;
+use actix_web::http::header;
 use config::Config;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::pkcs8_private_keys;
@@ -19,11 +20,20 @@ impl BackendConfig {
     self
       .cors
       .clone()
-      .map(|url| actix_cors::Cors::default().allowed_origin(&url))
+      //TODO: validate security/correctness
+      .map(|url| {
+        actix_cors::Cors::default()
+          .allowed_origin(&url)
+          .supports_credentials()
+          .allowed_methods(vec!["GET", "POST"])
+          .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
+          .allowed_header(header::CONTENT_TYPE)
+          .max_age(3600)
+      })
       .unwrap_or_else(|| {
         log::warn!(
           "Could not find a frontend url in the backend configuration. Attempting to run in \
-           restrictive Cors mode. This is likely to fail."
+           restrictive Cors mode. This is likely to fail for non-development setups."
         );
         actix_cors::Cors::default()
       })

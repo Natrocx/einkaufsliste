@@ -13,12 +13,6 @@ pub trait HasTypeDenominator {
   const DENOMINATOR: u64;
 }
 
-// TODO: cam parameters to proc macros solve this?
-// since traits cannot be partially implemented, we cannot use codegen without crying so here we go:
-pub trait MarkerTrait<T: Identifiable> {
-  fn try_from_u8_slice() -> Result<<T as Identifiable>::Id, &'static str>;
-}
-
 /// Declares the type of the Id of the implementing struct. Note that the Id still needs to be manually implemented.
 ///
 ///  The trait serves tight coupling between model objects to prevent divergence (for example in Database objects) when modifying id type later.

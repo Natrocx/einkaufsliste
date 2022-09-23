@@ -1,11 +1,11 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::List;
+use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::RegisterUserV1;
-use einkaufsliste::model::user::{ObjectList, UsersObjectLists};
+use einkaufsliste::model::user::ObjectList;
 use einkaufsliste::model::Identifiable;
-use einkaufsliste_codegen::Routable;
 use gloo_timers::future::TimeoutFuture;
 use log::info;
 use web_sys::{HtmlDivElement, HtmlElement};
@@ -14,9 +14,10 @@ use yew_router::{BrowserRouter, Switch};
 
 use self::auth::*;
 use self::list::{InnerListMessage, ListMessage};
-use crate::{service::api::{self, APIService}, util::routing::Page};
+use crate::service::api::APIService;
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
+use crate::util::routing::Page;
 
 mod auth;
 mod consts;
@@ -89,7 +90,7 @@ impl Component for App {
         // no rerendering necessary as the error is displayed imperatively
         false
       }
-      AppMessage::LoginSuccessful(id) => {
+      AppMessage::LoginSuccessful(_id) => {
         self.logged_in = true;
         info!(" successfully logged in");
         true
@@ -126,7 +127,7 @@ fn switch(route: &Page, api_service: Arc<APIService>, app_callback: Callback<App
         error_callback: app_callback,
       };
       html! {<ListView ..props />}
-    } /* TODO: replace clone? */
+    }
     Page::Settings => todo!(),
     Page::NotFound => html! {
       <h1>{"There is no such resource."}</h1>
@@ -147,8 +148,7 @@ async fn reset_error(error_node_ref: NodeRef, timeout: TimeoutFuture) -> AppMess
 }
 
 pub struct HomePage {
-  lists: Vec<<List as Identifiable>::Id>,
-  loaded_lists: bool,
+  lists: Option<Vec<Option<Rc<FlatItemsList>>>>,
   logged_in: bool,
 }
 
@@ -164,7 +164,8 @@ impl PartialEq for HomePageProperties {
 }
 
 pub enum HomePageMessage {
-  ListFetchSuccess(ObjectList),
+  FlatListFetched(FlatItemsList),
+  ObjectListFetched(ObjectList),
   LoginSuccessful(u64),
   Error(String),
 }
@@ -176,8 +177,7 @@ impl Component for HomePage {
 
   fn create(_ctx: &yew::Context<Self>) -> Self {
     Self {
-      lists: vec![],
-      loaded_lists: false,
+      lists: None,
       logged_in: false,
     }
   }
@@ -185,38 +185,70 @@ impl Component for HomePage {
   #[allow(clippy::let_unit_value)]
   fn view(&self, ctx: &yew::Context<Self>) -> Html {
     if !self.logged_in {
-      let callback = ctx.link().callback(|msg| match msg {
+      let auth_callback = ctx.link().callback(|msg| match msg {
         Ok(user_id) => HomePageMessage::LoginSuccessful(user_id),
         Err(reason) => HomePageMessage::Error(reason),
       });
       let props = AuthProperties {
         api_service: ctx.props().api_service.clone(),
-        callback,
+        callback: auth_callback,
       };
       html! {
-        <LoginView ..props />
+        <div>
+          <LoginView ..props />
+        </div>
       }
-    } else if !self.loaded_lists {
-      let api_service = ctx.props().api_service.clone();
-      ctx.link().send_future(get_users_lists_callback(api_service));
-
+    } else if self.lists.is_none() {
       html! {
         <div class="list-loading">
           <CircularLoadingIndicator />
         </div>
       }
     } else {
+      let lists = self.lists.as_ref().unwrap();
       html! {
-        <p>{"Vier"}</p>
+        <div>
+          {
+            lists.iter().map(|list| {
+              html! {<ListPreView list={list} />}
+            })
+            .collect::<Html>()
+          }
+          <p>{"Vier"}</p>
+        </div>
       }
     }
   }
 
   fn update(&mut self, ctx: &yew::Context<Self>, msg: Self::Message) -> bool {
     match msg {
-      HomePageMessage::ListFetchSuccess(_lists) => true,
+      // TODO: fetch lists here
+      HomePageMessage::ObjectListFetched(object_list) => {
+        self.lists = Some(Vec::with_capacity(object_list.list.len()));
+
+        for id in object_list.list {
+          let api = ctx.props().api_service.clone();
+          ctx.link().send_future(async move {
+            match api.get_flat_items_list(id.clone()).await {
+              Ok(list) => HomePageMessage::FlatListFetched(list),
+              Err(e) => HomePageMessage::Error(e.to_string()),
+            }
+          });
+        }
+
+        true
+      }
       HomePageMessage::LoginSuccessful(user_id) => {
         self.logged_in = true;
+        //TODO: fetch object_list here?
+
+        let api_service = ctx.props().api_service.clone();
+        ctx.link().send_future(async move {
+          match api_service.get_users_lists().await {
+            Ok(ol) => HomePageMessage::ObjectListFetched(ol),
+            Err(e) => HomePageMessage::Error(e.to_string()),
+          }
+        });
         ctx.props().app_callback.emit(AppMessage::LoginSuccessful(user_id));
         true
       }
@@ -225,24 +257,21 @@ impl Component for HomePage {
         ctx.props().app_callback.emit(AppMessage::Error(reason));
         false
       }
+      //TODO: Evaluate reducing page refreshes/performance impact
+      HomePageMessage::FlatListFetched(list) => {
+        self.lists.as_mut().unwrap().push(Some(Rc::new(list)));
+
+        true
+      }
     }
   }
-
-  fn changed(&mut self, ctx: &yew::Context<Self>) -> bool {
-    true
-  }
-
-  fn rendered(&mut self, ctx: &yew::Context<Self>, first_render: bool) {}
-
-  fn destroy(&mut self, ctx: &yew::Context<Self>) {}
 }
 
 pub struct ListPreView;
 
 #[derive(Clone, PartialEq, Eq, Properties)]
 pub struct ListPreviewProperties {
-  name: String,
-  image: u32, // TODO: place actual image
+  list: Option<Rc<FlatItemsList>>,
 }
 
 impl Component for ListPreView {
@@ -255,11 +284,25 @@ impl Component for ListPreView {
   }
 
   fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
-    let url = format!("https://localhost:8443/image/{}", ctx.props().image);
-
     html! {
       <div class="list-preview-container">
-        <img src={url}  alt={format!("List picture for: {}", ctx.props().name)} />
+        {
+          if let Some(list) = ctx.props().list.clone() {
+            if let Some(image_id) = list.image_id {
+            let url = format!("https://localhost:8443/image/{}", image_id);
+              html! { <img src={url}  alt={format!("List picture for: {}", list.name)} /> }
+            }
+            // if there is no
+            else {
+              html! {}
+            }
+        }
+          else {
+            html! {
+              <CircularLoadingIndicator />
+            }
+          }
+        }
       </div>
     }
   }
@@ -306,7 +349,7 @@ async fn register_callback((name, pw, api_service): (String, String, Arc<APIServ
 
 async fn get_users_lists_callback(api_service: Arc<APIService>) -> HomePageMessage {
   match api_service.get_users_lists().await {
-    Ok(val) => HomePageMessage::ListFetchSuccess(val),
+    Ok(val) => HomePageMessage::ObjectListFetched(val),
     Err(reason) => HomePageMessage::Error(reason.to_string()),
   }
 }

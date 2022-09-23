@@ -13,6 +13,7 @@ use zerocopy::AsBytes;
 
 use crate::db::{self, RawRkyvStore};
 use crate::response::*;
+use crate::util::errors::{bad_request, error};
 use crate::util::identity_ext::IdentityExt;
 use crate::DbState;
 
@@ -24,14 +25,14 @@ pub(crate) async fn register_v1(
 ) -> Response {
   // validate registration request
   if parameter.password.len() < 8 {
-    return ResponseError::ErrorBadRequest.into();
+    return bad_request("Password too short").into();
   }
   if data.login_db.get(&parameter.name)?.is_some() {
-    return ResponseError::ErrorBadRequest.into();
+    return bad_request("User already exists").into();
   }
 
   let hashed_pw = DbState::hash_password(&parameter.password).await;
-  let id = data.db.generate_id().map_err(ErrorInternalServerError)?;
+  let id = data.db.generate_id().map_err(error)?;
 
   let value = UserWithPassword {
     user: User {

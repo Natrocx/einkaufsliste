@@ -81,7 +81,7 @@ fn parse_variants_attributes(
     let lit = attr.parse_args::<LitStr>()?;
     let val = lit.value();
 
-    // handle exceptions regarding URI formation
+    // handle exceptions regarding URI formation. # is illegal due to technical restrictions in macro expansion (see below)
     if val.find('#').is_some() {
       return Err(syn::Error::new_spanned(
         lit,
@@ -89,7 +89,6 @@ fn parse_variants_attributes(
       ));
     }
 
-    //TODO: param over prefix
     if !val.starts_with('/') && prefix.is_none() {
       return Err(syn::Error::new_spanned(
         lit,
@@ -100,10 +99,12 @@ fn parse_variants_attributes(
       ));
     }
 
+    // rewrite URI with potential prefix
     let lit = match prefix {
       Some(ref prefix) => LitStr::new(&format!("{}{val}", &prefix.value()), lit.span()),
       None => lit,
     };
+
     at_attribute_params.push(lit);
 
     for attr in attrs.iter() {
@@ -269,7 +270,6 @@ pub fn parse_struct_attrs(attrs: &[Attribute]) -> syn::Result<Option<LitStr>> {
   match full_attribute {
     // if the attribute is found and correctly formed:
     Some(Ok(Meta::List(list))) => {
-      // TODO: recheck path? the rkyv auther does it, but I don't know why
       let prefix = list
         .nested
         .first()

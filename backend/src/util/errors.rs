@@ -12,6 +12,11 @@ pub fn abort_error<T: std::fmt::Display>(e: T) -> ConflictableTransactionError<R
   ConflictableTransactionError::Abort(error(e))
 }
 
-pub fn bad_request<T>(_: T) -> ResponseError {
+pub fn bad_request<T>(e: T) -> ResponseError
+where
+  T: core::fmt::Debug,
+{
+  log::debug!("A user submitted a bad request. Rejecting: {:?}", e);
+
   ResponseError::ErrorBadRequest
 }

@@ -19,7 +19,9 @@ fn build_frontend(args: &Args) {
   let current_dir = current_dir.to_string_lossy();
 
   let mut command = std::process::Command::new("trunk");
-  command.arg("build").current_dir(format!("{current_dir}/frontend"));
+  command
+    .args(["build", "--features", "dev_router"])
+    .current_dir(format!("{current_dir}/frontend"));
 
   // if the backend is built in release mode, we also want to build the frontend in release mode
   if args.optimize {
@@ -32,9 +34,10 @@ fn build_frontend(args: &Args) {
 
 //TODO: automatically dereference cargo project root?
 fn copy_files_to_webroot() {
-  // clear webroot so we do not clutter it and create future problems. This might as well fail, and we cannot do anything about it, so any failure will be silently ignored:
   let current_dir = std::env::current_dir().unwrap();
   let current_dir = current_dir.to_string_lossy();
+
+  // clear webroot so we do not clutter it and create future problems. This might as well fail, and we cannot do anything about it, so any failure will be silently ignored:
   let _ = std::fs::remove_dir_all(format!("{current_dir}/backend/web_root"));
   std::fs::create_dir(format!("{current_dir}/backend/web_root")).unwrap();
 
@@ -85,7 +88,7 @@ fn run_backend(args: &Args) {
   command.spawn().unwrap().wait().unwrap();
 }
 
-/// Simple program to greet a person
+/// Arguments to the runscript
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
