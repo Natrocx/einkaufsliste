@@ -19,7 +19,8 @@ And then repeatedly:
 ./run [-o] -[-r]
 ```
 
-This runscript is required to mitigate issues regarding to CORS handling and requires no external dependencies like webservers. The frontend will be served by the backend under the `/dev/` URI-prefix.
+This runscript is required to mitigate issues regarding to CORS handling (as opposed to serving with trunk) and requires no external dependencies like webservers. The frontend will be served by the backend under the `/dev/` URI-prefix.
+The runscript is only support on *nix operating systems.
 
 # MSRV
 The minimum supported rust version is `nightly` due to reliance on the `Try` trait to make code more ergonomic. You may need rustc v1.65 or later.

@@ -1,11 +1,9 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::FlatItemsList;
 use einkaufsliste::model::requests::RegisterUserV1;
 use einkaufsliste::model::user::ObjectList;
-use einkaufsliste::model::Identifiable;
 use gloo_timers::future::TimeoutFuture;
 use log::info;
 use web_sys::{HtmlDivElement, HtmlElement};
@@ -13,7 +11,6 @@ use yew::{html, Callback, Component, Html, NodeRef, Properties};
 use yew_router::{BrowserRouter, Switch};
 
 use self::auth::*;
-use self::list::{InnerListMessage, ListMessage};
 use crate::service::api::APIService;
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
@@ -85,7 +82,7 @@ impl Component for App {
 
         ctx
           .link()
-          .send_future(reset_error(self.error_node_ref.clone(), TimeoutFuture::new(20_000)));
+          .send_future(reset_error(self.error_node_ref.clone(), TimeoutFuture::new(5_000)));
 
         // no rerendering necessary as the error is displayed imperatively
         false
@@ -109,7 +106,7 @@ impl Component for App {
 impl App {
   fn title(&self) -> String {
     match &self.current_page {
-      Page::Overview => "Einkaufsliste".to_string(),
+      Page::Overview => "Einkaufsliste - Home".to_string(),
       Page::List { id: _, name } => name.clone(),
       Page::Settings => "Settings".to_string(),
       Page::NotFound => "Resource not found".to_string(),
@@ -193,9 +190,10 @@ impl Component for HomePage {
         api_service: ctx.props().api_service.clone(),
         callback: auth_callback,
       };
+
       html! {
         <div>
-          <LoginView ..props />
+          <AuthView ..props />
         </div>
       }
     } else if self.lists.is_none() {
@@ -206,23 +204,29 @@ impl Component for HomePage {
       }
     } else {
       let lists = self.lists.as_ref().unwrap();
-      html! {
-        <div>
-          {
-            lists.iter().map(|list| {
-              html! {<ListPreView list={list} />}
-            })
-            .collect::<Html>()
-          }
-          <p>{"Vier"}</p>
-        </div>
+
+      if !lists.is_empty() {
+        html! {
+          <div>
+            {
+              lists.iter().map(|list| {
+                html! {<ListPreView list={list} />}
+              })
+              .collect::<Html>()
+            }
+            <p>{"Vier"}</p>
+          </div>
+        }
+      } else {
+        html! {
+          <p>{"You do not currently have any lists."}</p>
+        }
       }
     }
   }
 
   fn update(&mut self, ctx: &yew::Context<Self>, msg: Self::Message) -> bool {
     match msg {
-      // TODO: fetch lists here
       HomePageMessage::ObjectListFetched(object_list) => {
         self.lists = Some(Vec::with_capacity(object_list.list.len()));
 
@@ -240,8 +244,8 @@ impl Component for HomePage {
       }
       HomePageMessage::LoginSuccessful(user_id) => {
         self.logged_in = true;
-        //TODO: fetch object_list here?
 
+        // if the user is logged in, fetch their lists asynchronously
         let api_service = ctx.props().api_service.clone();
         ctx.link().send_future(async move {
           match api_service.get_users_lists().await {
@@ -312,22 +316,9 @@ impl Component for ListPreView {
 // ============================ api helpers ===================================
 // used to convert generic APIService returns to yew component messages
 // this is only preferable over closures, since we are dealing with async here
-
-/// Wrapper function for use with yew
-async fn fetch_callback((id, api_service): (<Item as Identifiable>::Id, Arc<APIService>)) -> ListMessage {
-  match api_service.get_flat_items_list(id).await {
-    Ok(val) => ListMessage::FetchSuccessful(val),
-    Err(e) => ListMessage::FetchUnsuccessful(e.to_string()),
-  }
-}
-
-/// Wrapper function for use with yew
-async fn change_name_callback((item, api_service): (Item, Arc<APIService>)) -> InnerListMessage {
-  match api_service.update_item(&item).await {
-    Ok(_) => InnerListMessage::Noop,
-    Err(e) => InnerListMessage::Error(e.to_string()),
-  }
-}
+//
+// For reasons unbeknownst to me, rust does not support capturing Arcs in async
+// closures and they therefore have to be passed to async fns
 
 /// Wrapper function for use with yew
 async fn login_callback((name, pw, api_service): (String, String, Arc<APIService>)) -> AuthMessage {

@@ -1,12 +1,15 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::FlatItemsList;
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
+use yew_router::prelude::History;
+use yew_router::scope_ext::RouterScopeExt;
 
 use super::consts::*;
-use super::{change_name_callback, fetch_callback, AppMessage};
+use super::AppMessage;
 use crate::service::api::APIService;
 use crate::ui::util::CircularLoadingIndicator;
 
@@ -146,8 +149,6 @@ impl Component for ListItemView {
       ListItemMessage::Delete => todo!(),
     }
   }
-
-  fn destroy(&mut self, _ctx: &Context<Self>) {}
 }
 
 #[derive(Properties, Clone)]
@@ -167,7 +168,7 @@ pub struct InnerListView {}
 
 #[derive(Properties)]
 pub struct InnerListProperties {
-  list: FlatItemsList,
+  list: Rc<FlatItemsList>,
   api_service: Arc<APIService>,
   error_callback: Callback<AppMessage>,
 }
@@ -195,7 +196,14 @@ impl Component for InnerListView {
   fn view(&self, ctx: &Context<Self>) -> Html {
     let api_service = ctx.props().api_service.clone();
     // Do not try to replace this with a closure. You will cry.
-    let callback = ctx.link().callback_future(change_name_callback);
+    let callback = ctx
+      .link()
+      .callback_future(|(item, api): (Item, Arc<APIService>)| async move {
+        match api.update_item(&item).await {
+          Ok(_) => InnerListMessage::Noop,
+          Err(e) => InnerListMessage::Error(e.to_string()),
+        }
+      });
 
     html! {
       <>
@@ -227,8 +235,7 @@ pub enum ListMessage {
 }
 
 pub struct ListView {
-  list: Option<FlatItemsList>,
-  fetch_finished: bool,
+  list: Option<Rc<FlatItemsList>>,
 }
 
 impl Component for ListView {
@@ -237,21 +244,22 @@ impl Component for ListView {
   type Properties = ListProperties;
 
   fn create(ctx: &Context<Self>) -> Self {
-    ctx
-      .link()
-      .send_future(fetch_callback((ctx.props().id, ctx.props().api_service.clone())));
+    let id = ctx.props().id;
+    let api = ctx.props().api_service.clone();
+    ctx.link().send_future(async move {
+      match api.get_flat_items_list(id).await {
+        Ok(list) => ListMessage::FetchSuccessful(list),
+        Err(e) => ListMessage::FetchUnsuccessful(e.to_string()),
+      }
+    });
 
-    Self {
-      list: None,
-      fetch_finished: false,
-    }
+    Self { list: None }
   }
 
   #[allow(clippy::let_unit_value)]
   fn view(&self, ctx: &Context<Self>) -> Html {
     html! {
       {
-        if self.fetch_finished {
           if self.list.is_some() {
             let props = InnerListProperties { list: self.list.clone().unwrap(), api_service: ctx.props().api_service.clone(), error_callback: ctx.props().error_callback.clone() };
             html! {
@@ -260,15 +268,6 @@ impl Component for ListView {
               </div>
             }
           }
-          else {
-            html! {
-              <div>
-                <p>{"Error fetching data"}</p>
-                <progress></progress>
-              </div>
-            }
-          }
-        }
         else {
           html! {
             <div class="list-loading">
@@ -283,13 +282,13 @@ impl Component for ListView {
   fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
     match msg {
       ListMessage::FetchSuccessful(list) => {
-        self.fetch_finished = true;
-        self.list = Some(list);
+        self.list = Some(Rc::new(list));
         true
       }
       ListMessage::FetchUnsuccessful(message) => {
-        self.fetch_finished = true;
+        // if the list could not be loaded, print error message and go back (there is nothing the user can do here)
         ctx.props().error_callback.emit(AppMessage::Error(message));
+        ctx.link().history().unwrap().go(-1);
         true
       }
     }

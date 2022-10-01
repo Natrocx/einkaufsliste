@@ -10,6 +10,8 @@ const NOT_FOUND_ATTR_IDENT: &str = "not_found";
 
 const ROUTE_PREFIX_ATTR_IDENT: &str = "route_prefix";
 
+/* The codegen in this file is adapted from yew_router version 0.16 */
+
 pub struct Routable {
   ident: Ident,
   at_attribute_params: Vec<LitStr>,
@@ -17,7 +19,6 @@ pub struct Routable {
   not_found_route: Option<Ident>,
 }
 
-/// Copied 1 to 1 from yew-router
 impl Parse for Routable {
   fn parse(input: ParseStream) -> syn::Result<Self> {
     let DeriveInput { ident, data, attrs, .. } = input.parse()?;
@@ -41,7 +42,6 @@ impl Parse for Routable {
   }
 }
 
-// Adapted from yew_router 0.16
 fn parse_variants_attributes(
   variants: &Punctuated<Variant, syn::token::Comma>,
   prefix: Option<LitStr>,

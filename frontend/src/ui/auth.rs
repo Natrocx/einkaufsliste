@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use web_sys::HtmlInputElement;
-use yew::{html, Callback, Component, NodeRef, Properties};
+use yew::{html, Callback, Component, Html, NodeRef, Properties};
 
-use super::{login_callback, register_callback};
-use crate::service::api::APIService;
+use crate::service::api::{self, APIService};
 
-pub(super) struct LoginView;
-
+pub(super) struct AuthView;
 
 #[derive(Properties)]
 pub(super) struct AuthProperties {
@@ -23,7 +22,7 @@ impl PartialEq for AuthProperties {
 
 pub type AuthMessage = Result<u64, String>;
 
-impl Component for LoginView {
+impl Component for AuthView {
   type Message = AuthMessage;
 
   type Properties = AuthProperties;
@@ -37,23 +36,24 @@ impl Component for LoginView {
     let pw_ref = NodeRef::default();
     let _name_ref = name_ref.clone();
     let _pw_ref = pw_ref.clone();
-    let api_service = ctx.props().api_service.clone(); // double clone for the win... (the compiler will complain for whatever reason if we dont clone the Arc here)
+    let api_service = ctx.props().api_service.clone();
 
-    let callback = ctx.link().callback_future(move |_| {
+    let login_callback = ctx.link().callback_future(move |_| {
       let name = _name_ref.cast::<HtmlInputElement>().unwrap().value();
       let pw = _pw_ref.cast::<HtmlInputElement>().unwrap().value();
 
-      login_callback((name, pw, api_service.clone()))
+      crate::ui::login_callback((name, pw, api_service.clone()))
     });
 
     let _name_ref = name_ref.clone();
     let _pw_ref = pw_ref.clone();
     let api_service = ctx.props().api_service.clone(); // double clone for the win... (the compiler will complain for whatever reason if we dont clone the Arc here)
+
     let register_callback = ctx.link().callback_future(move |_| {
       let name = _name_ref.cast::<HtmlInputElement>().unwrap().value();
       let pw = _pw_ref.cast::<HtmlInputElement>().unwrap().value();
 
-      register_callback((name, pw, api_service.clone()))
+      crate::ui::register_callback((name, pw, api_service.clone()))
     });
 
     html! {
@@ -65,7 +65,7 @@ impl Component for LoginView {
         <input type="password" id="login_password" placeholder="Password" ref={pw_ref} />
 
         <div>
-          <button onclick={callback}>{"Login"}</button>
+          <button onclick={login_callback}>{"Login"}</button>
           <button onclick={register_callback}>{"Register"}</button>
         </div>
       </div>
