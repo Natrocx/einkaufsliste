@@ -9,7 +9,7 @@ use clap::Parser;
 use log::debug;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use notify_debouncer_mini::{new_debouncer,  DebouncedEvent};
+use notify_debouncer_mini::{new_debouncer, DebouncedEvent};
 
 fn main() {
   let current_dir = std::env::current_dir().unwrap();
@@ -36,7 +36,7 @@ fn main() {
 fn watch_frontend(cli: &Cli, project_root: &Path) {
   let (tx, fe_rx) = std::sync::mpsc::channel();
 
-  let mut fe_debouncer = new_debouncer(Duration::from_secs(2), None, tx).unwrap();
+  let mut fe_debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
   fe_debouncer
     .watcher()
@@ -138,7 +138,7 @@ fn find_project_root(path: &Path) -> std::io::Result<&Path> {
 fn build_frontend(args: &Cli, project_root: &Path) {
   let mut command = std::process::Command::new("trunk");
   command
-    .args(["build", "--features", "dev_router"])
+    .args(["build"]) // activating features through trunk seems broken at the moment -  you should place development-features under default features
     .current_dir(format!("{}/frontend", project_root.display()));
 
   // if the backend is built in release mode, we also want to build the frontend in release mode

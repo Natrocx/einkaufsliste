@@ -1,17 +1,18 @@
 use actix_identity::Identity;
-use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
+
 use actix_web::{get, post, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
 use einkaufsliste::model::user::User;
-use sled::transaction::abort;
+use sled::transaction::{abort, TransactionalTree};
 use zerocopy::AsBytes;
 
 use crate::db::{ObjectStore, RawRkyvStore};
 use crate::response::{Response, ResponseError};
+use crate::util::errors::{error, not_found};
 use crate::util::identity_ext::IdentityExt;
-use crate::DbState;
+use crate::{db, DbState};
 
 #[get("/item/{id}")]
 pub async fn get_item_by_id(
@@ -57,35 +58,30 @@ pub async fn store_item_attached(
 
   <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item_id, &param.item)?;
 
-  // TODO: rewrite
   state
     .list_db
-    .transaction(|tx_id| {
-      let current_value = match tx_id.get(param.list_id.as_bytes())? {
-        Some(val) => val,
-        None => abort(ErrorNotFound("No such list."))?,
-      };
-      let mut old_list = match unsafe { rkyv::from_bytes_unchecked::<List>(&current_value) } {
+    .transaction(|tx_db| {
+      let mut current_list = match unsafe {
+        <&TransactionalTree as db::RawRkyvStore<List, 512>>::get_unchecked(&tx_db, param.list_id)
+      } {
         Ok(val) => val,
-        Err(e) => abort(ErrorInternalServerError(e))?,
+        Err(e) => return abort(not_found(e)),
       };
-      old_list.items.push(param.item.id);
-
-      let bytes = match rkyv::to_bytes::<_, 256>(&old_list) {
-        Ok(bytes) => bytes,
-        Err(e) => abort(ErrorInternalServerError(e))?,
-      };
-
-      match tx_id.insert(param.list_id.as_bytes(), bytes.as_bytes()) {
+      current_list.items.push(param.item.id);
+      match <&TransactionalTree as db::RawRkyvStore<List, 512>>::store_unlisted(
+        &tx_db,
+        param.list_id,
+        &current_list,
+      ) {
         Ok(_) => Ok(()),
-        Err(e) => abort(ErrorInternalServerError(e)),
+        Err(e) => abort(error(e)),
       }
     })
     .map_err(|e| match e {
       // return inner error if its a sled-user-error:
       sled::transaction::TransactionError::Abort(e) => e,
       // if not, something else went wrong, so generic server error:
-      _ => ErrorInternalServerError(e),
+      _ => error(e),
     })?;
 
   // ensure that we can get items independent of their corresponding list

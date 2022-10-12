@@ -82,7 +82,7 @@ impl DbState {
     object_id: <Object as Identifiable>::Id,
     user_id: <User as Identifiable>::Id,
   ) -> Result<(), ResponseError>
-  // don't ask me bro...
+  // don't ask me bro... thanks to rust analyzer we dont have to ask bro
   where
     <<Object as einkaufsliste::model::Identifiable>::Id as rkyv::Archive>::Archived:
       rkyv::Deserialize<

@@ -20,6 +20,7 @@ mod auth;
 mod consts;
 mod list;
 mod util;
+pub mod modal;
 
 pub struct App {
   logged_in: bool,
@@ -147,6 +148,7 @@ async fn reset_error(error_node_ref: NodeRef, timeout: TimeoutFuture) -> AppMess
 pub struct HomePage {
   lists: Option<Vec<Option<Rc<FlatItemsList>>>>,
   logged_in: bool,
+  modal_ref: NodeRef,
 }
 
 #[derive(Properties)]
@@ -161,10 +163,13 @@ impl PartialEq for HomePageProperties {
 }
 
 pub enum HomePageMessage {
-  FlatListFetched(FlatItemsList),
+  AddList(FlatItemsList),
   ObjectListFetched(ObjectList),
   LoginSuccessful(u64),
+  ShowAddListModal,
+  CloseAddListModal,
   Error(String),
+  None,
 }
 
 impl Component for HomePage {
@@ -176,6 +181,7 @@ impl Component for HomePage {
     Self {
       lists: None,
       logged_in: false,
+      modal_ref: NodeRef::default(),
     }
   }
 
@@ -205,22 +211,44 @@ impl Component for HomePage {
     } else {
       let lists = self.lists.as_ref().unwrap();
 
-      if !lists.is_empty() {
-        html! {
-          <div>
-            {
-              lists.iter().map(|list| {
-                html! {<ListPreView list={list} />}
-              })
-              .collect::<Html>()
+      let on_add_list_button_pressed = ctx.link().callback(|_| HomePageMessage::ShowAddListModal);
+      let close_modal = ctx.link().callback(|_| HomePageMessage::CloseAddListModal);
+
+      html! {
+        <div>
+          {
+          // render list previews
+          if !lists.is_empty() {
+            html! {
+              <div>
+                {
+                  lists.iter().map(|list| {
+                    html! {<ListPreView list={list} />}
+                  })
+                  .collect::<Html>()
+                }
+                <p>{"Vier"}</p>
+              </div>
             }
-            <p>{"Vier"}</p>
+          } // or render placeholder
+          else {
+            html! {
+              <p>{"You do not currently have any lists."}</p>
+            }
+          }
+          }
+
+          <div ref={self.modal_ref.clone()} class="inactive modal-container">
+            <div class="add-list-modal">
+              <p class="modal-item">{"Name:"}</p>  <input class="input modal-item" type="text" placeholder="New list name" />
+              <p class="modal-item">{"Shop - optional:"}</p>  <input type="text" class="input modal-item" placeholder="Shop - TODO" />
+              <button onclick={close_modal}>{"Cancel"}</button>
+            </div>
           </div>
-        }
-      } else {
-        html! {
-          <p>{"You do not currently have any lists."}</p>
-        }
+          <div class="add-list floating-button">
+            <span onclick={on_add_list_button_pressed}class="material-symbols-outlined button"> {"add"} </span>
+          </div>
+        </div>
       }
     }
   }
@@ -234,7 +262,7 @@ impl Component for HomePage {
           let api = ctx.props().api_service.clone();
           ctx.link().send_future(async move {
             match api.get_flat_items_list(id).await {
-              Ok(list) => HomePageMessage::FlatListFetched(list),
+              Ok(list) => HomePageMessage::AddList(list),
               Err(e) => HomePageMessage::Error(e.to_string()),
             }
           });
@@ -262,11 +290,32 @@ impl Component for HomePage {
         false
       }
       //TODO: Evaluate reducing page refreshes/performance impact
-      HomePageMessage::FlatListFetched(list) => {
+      HomePageMessage::AddList(list) => {
         self.lists.as_mut().unwrap().push(Some(Rc::new(list)));
 
         true
       }
+      HomePageMessage::ShowAddListModal => {
+        let div_element = match self.modal_ref.cast::<HtmlDivElement>() {
+          Some(div) => div,
+          None => return false, // internal error: no modal div so nothing to show
+        };
+        // if the modal is active already, that's okay
+        let _ = div_element.class_list().remove_1("inactive");
+
+        false
+      }
+      HomePageMessage::CloseAddListModal => {
+        let div_element = match self.modal_ref.cast::<HtmlDivElement>() {
+          Some(div) => div,
+          None => return false, /* internal error but can't occur during normal operation: no modal div so nothing to hide */
+        };
+        // if the modal is hidden already, that's okay
+        let _ = div_element.class_list().add_1("inactive");
+
+        true
+      }
+      HomePageMessage::None => false,
     }
   }
 }

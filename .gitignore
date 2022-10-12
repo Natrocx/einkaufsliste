@@ -1,6 +1,3 @@
-# For storing debug files:
-/test
-
 # Standard rust:
 **/target
 **/dist
@@ -14,6 +11,8 @@
 
 frontend/bower_components/**
 
-# Project-wide rustfmt settings (uncomment to change)
+# Project-wide rust settings (uncomment to change)
 # **/.rustfmt.toml
 # **/rustfmt.toml
+# configure your linker here
+/.cargo/config.toml

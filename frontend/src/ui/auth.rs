@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlInputElement, KeyboardEvent, MouseEvent};
 use yew::{html, Callback, Component, Html, NodeRef, Properties};
 
 use crate::service::api::{self, APIService};
@@ -56,13 +56,22 @@ impl Component for AuthView {
       crate::ui::register_callback((name, pw, api_service.clone()))
     });
 
+    let _login_callback = login_callback.clone();
+    let keypress_handler = ctx.link().batch_callback(move |event: KeyboardEvent| {
+      let key = event.key();
+      if key.eq("Enter") {
+        _login_callback.emit(MouseEvent::new("").unwrap());
+      }
+      None
+    });
+
     html! {
       <div class="login">
-        <label for="login_user_name">{"Username:"}</label>
-        <input type="text" id="login_user_name" placeholder="Username" ref={name_ref} />
+        <label for="login_user_name" >{"Username:"}</label>
+        <input type="text" id="login_user_name" onkeypress={keypress_handler.clone()} placeholder="Username" ref={name_ref} />
 
         <label for="login_password">{"Password:"}</label>
-        <input type="password" id="login_password" placeholder="Password" ref={pw_ref} />
+        <input type="password" id="login_password"  onkeypress={keypress_handler} placeholder="Password" ref={pw_ref} />
 
         <div>
           <button onclick={login_callback}>{"Login"}</button>

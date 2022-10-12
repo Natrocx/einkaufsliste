@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/el_macro/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/frontend/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/codegen/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/runner/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

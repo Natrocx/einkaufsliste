@@ -48,7 +48,7 @@ pub(crate) async fn store_article(
 ) -> Response {
   let user_id = identity.parse()?;
 
-  // variable not inlineable because...???????
+  // variable not inlineable because...??????? fuck you
   let new_id = data.db.generate_id()?;
   article.id = new_id;
 

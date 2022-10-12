@@ -25,7 +25,7 @@ impl BackendConfig {
         actix_cors::Cors::default()
           .allowed_origin(&url)
           .supports_credentials()
-          .allowed_methods(vec!["GET", "POST"])
+          .allowed_methods(vec!["GET", "POST", "PUT"])
           .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
           .allowed_header(header::CONTENT_TYPE)
           .max_age(3600)

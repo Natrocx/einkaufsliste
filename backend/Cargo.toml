@@ -42,3 +42,4 @@ mime = "0.3.16"
 [features]
 default = []
 serve_frontend = ["actix-files"]
+

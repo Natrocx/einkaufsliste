@@ -20,3 +20,7 @@ where
 
   ResponseError::ErrorBadRequest
 }
+
+pub fn not_found<T>(_e: T) -> ResponseError {
+  ResponseError::ErrorNotFound
+}

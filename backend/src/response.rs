@@ -2,6 +2,7 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use std::ops::{Deref, FromResidual, Try};
 
+use actix_session::storage::LoadError;
 use actix_web::body::{BodySize, MessageBody};
 use actix_web::error::{
   ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized,
@@ -285,6 +286,19 @@ impl From<PayloadError> for ResponseError {
       PayloadError::Http2Payload(_) => ResponseError::ErrorBadRequest,
       PayloadError::Io(_) => ResponseError::ErrorInternalServerError,
       _ => ResponseError::ErrorInternalServerError,
+    }
+  }
+}
+
+impl From<ResponseError> for LoadError {
+  fn from(e: ResponseError) -> Self {
+    match e {
+      ResponseError::ErrorBadRequest |
+      ResponseError::ErrorUnauthenticated |
+      ResponseError::ErrorUnauthorized |
+      ResponseError::ErrorNotFound |
+      ResponseError::Infallible => LoadError::Other(e.into()),
+      ResponseError::ErrorInternalServerError => LoadError::Deserialization(e.into()),
     }
   }
 }

@@ -11,8 +11,9 @@ mod util;
 use std::time::Duration;
 
 use actix_identity::IdentityMiddleware;
-use actix_session::storage::CookieSessionStore;
+use actix_session::config::{CookieContentSecurity, PersistentSession};
 use actix_session::SessionMiddleware;
+use actix_web::cookie::SameSite;
 use actix_web::HttpServer;
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
@@ -20,6 +21,8 @@ use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
 use mimalloc::MiMalloc;
 use rand::Rng;
+
+use crate::util::session_store::SledSessionStore;
 
 // Use a reasonable global allocator to avoid performance problems due to rkyv serialization allocations
 #[global_allocator]
@@ -30,6 +33,10 @@ async fn main() -> std::io::Result<()> {
   env_logger::init();
 
   let db = sled::open("./data.sled")?;
+
+  let session_store = SledSessionStore {
+    session_db: db.open_tree("sessions")?,
+  };
   let application_state = DbState {
     article_db: db.open_tree("article")?,
     item_db: db.open_tree("item")?,
@@ -77,10 +84,15 @@ async fn main() -> std::io::Result<()> {
       .wrap(cors)
       .wrap(actix_web::middleware::Logger::default())
       .wrap(identity_mw)
-      .wrap(SessionMiddleware::new(
-        CookieSessionStore::default(),
-        cookie_priv_key.clone(),
-      ))
+      .wrap(
+        SessionMiddleware::builder(session_store.clone(), cookie_priv_key.clone())
+          .session_lifecycle(PersistentSession::default())
+          .cookie_content_security(CookieContentSecurity::Private)
+          .cookie_same_site(SameSite::Strict)
+          .cookie_secure(true)
+          .cookie_http_only(true)
+          .build(),
+      )
   })
   .bind_rustls("127.0.0.1:8443", config.tls_config)?
   .run()
