@@ -28,7 +28,7 @@ mod api_tests {
 
       println!("-------------- unauthenticated POST /itemList -------------");
       api_service
-        .push_new_item_list(List {
+        .push_new_item_list(&List {
           id: 0,
           name: "vier".to_owned(),
           shop: None,
@@ -71,7 +71,7 @@ mod api_tests {
 
       println!("-------------- POST /itemList ----------------------");
       let id = api_service
-        .push_new_item_list(List {
+        .push_new_item_list(&List {
           id: 0,
           name: "Vierfünf".to_owned(),
           shop: None,

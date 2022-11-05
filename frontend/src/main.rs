@@ -1,5 +1,3 @@
-#![feature(async_closure)]
-
 pub mod service;
 mod tests;
 pub mod ui;

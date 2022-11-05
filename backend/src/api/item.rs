@@ -1,5 +1,4 @@
 use actix_identity::Identity;
-
 use actix_web::{get, post, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};

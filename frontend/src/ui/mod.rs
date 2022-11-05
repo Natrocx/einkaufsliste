@@ -1,16 +1,17 @@
 use std::rc::Rc;
-use std::sync::Arc;
 
-use einkaufsliste::model::list::FlatItemsList;
+use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::RegisterUserV1;
 use einkaufsliste::model::user::ObjectList;
 use gloo_timers::future::TimeoutFuture;
 use log::info;
-use web_sys::{HtmlDivElement, HtmlElement};
-use yew::{html, Callback, Component, Html, NodeRef, Properties};
+use web_sys::{HtmlDivElement, HtmlElement, HtmlInputElement};
+use yew::{html, html_nested, Callback, Component, ContextProvider, Html, NodeRef, Properties};
 use yew_router::{BrowserRouter, Switch};
 
 use self::auth::*;
+use self::context::APIContext;
+use self::modal::*;
 use crate::service::api::APIService;
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
@@ -18,15 +19,16 @@ use crate::util::routing::Page;
 
 mod auth;
 mod consts;
+pub mod context;
 mod list;
-mod util;
 pub mod modal;
+mod util;
 
 pub struct App {
   logged_in: bool,
   error_node_ref: NodeRef,
   current_page: Page,
-  api_service: Arc<APIService>,
+  api_service: Rc<APIService>,
 }
 
 pub enum AppMessage {
@@ -45,13 +47,15 @@ impl Component for App {
     Self {
       logged_in: false,
       error_node_ref: Default::default(),
-      api_service: Arc::new(APIService::new("https://localhost:8443").unwrap()),
+      api_service: Rc::new(APIService::new("https://localhost:8443").unwrap()),
       current_page: Page::Overview,
     }
   }
 
   fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
-    let api_service = self.api_service.clone();
+    let context = APIContext {
+      service: self.api_service.clone(),
+    };
 
     let error_callback = ctx.link().callback(|message: AppMessage| message);
     html! {
@@ -60,9 +64,11 @@ impl Component for App {
           <p class="page-title">{self.title()}</p>
         </div>
 
-        <BrowserRouter>
-          <Switch<Page> render={ Switch::render(move |route| { switch(route, api_service.clone(), error_callback.clone())}) } />
-        </BrowserRouter>
+        <ContextProvider<APIContext> context={context} >
+          <BrowserRouter>
+            <Switch<Page> render={ Switch::render(move |route| { switch(route, error_callback.clone())}) } />
+          </BrowserRouter>
+        </ContextProvider<APIContext>>
 
         <div class="error-container">
           <p class="error-message inactive" ref={&self.error_node_ref}/>
@@ -115,12 +121,11 @@ impl App {
   }
 }
 
-fn switch(route: &Page, api_service: Arc<APIService>, app_callback: Callback<AppMessage>) -> Html {
+fn switch(route: &Page, app_callback: Callback<AppMessage>) -> Html {
   match route {
-    Page::Overview => html!(<HomePage api_service={api_service} app_callback={app_callback}/>),
+    Page::Overview => html!(<HomePage app_callback={app_callback}/>),
     Page::List { name: _, id } => {
       let props = ListProperties {
-        api_service,
         id: *id,
         error_callback: app_callback,
       };
@@ -148,24 +153,19 @@ async fn reset_error(error_node_ref: NodeRef, timeout: TimeoutFuture) -> AppMess
 pub struct HomePage {
   lists: Option<Vec<Option<Rc<FlatItemsList>>>>,
   logged_in: bool,
-  modal_ref: NodeRef,
+  show_add_list_modal: bool,
 }
 
-#[derive(Properties)]
+#[derive(Debug, PartialEq, Properties)]
 pub struct HomePageProperties {
-  pub api_service: Arc<APIService>,
   pub app_callback: Callback<AppMessage>,
-}
-impl PartialEq for HomePageProperties {
-  fn eq(&self, other: &Self) -> bool {
-    self.api_service.base_url == other.api_service.base_url && self.app_callback == other.app_callback
-  }
 }
 
 pub enum HomePageMessage {
-  AddList(FlatItemsList),
+  ListFetched(FlatItemsList),
   ObjectListFetched(ObjectList),
   LoginSuccessful(u64),
+  NewList(String),
   ShowAddListModal,
   CloseAddListModal,
   Error(String),
@@ -181,7 +181,7 @@ impl Component for HomePage {
     Self {
       lists: None,
       logged_in: false,
-      modal_ref: NodeRef::default(),
+      show_add_list_modal: false,
     }
   }
 
@@ -193,8 +193,8 @@ impl Component for HomePage {
         Err(reason) => HomePageMessage::Error(reason),
       });
       let props = AuthProperties {
-        api_service: ctx.props().api_service.clone(),
-        callback: auth_callback,
+        submit_callback: auth_callback,
+        cancel_callback: None,
       };
 
       html! {
@@ -212,39 +212,78 @@ impl Component for HomePage {
       let lists = self.lists.as_ref().unwrap();
 
       let on_add_list_button_pressed = ctx.link().callback(|_| HomePageMessage::ShowAddListModal);
-      let close_modal = ctx.link().callback(|_| HomePageMessage::CloseAddListModal);
+
+      let modal_refs = vec![NodeRef::default(); 2];
+
+      let modal_props = TextInputModalProps {
+        prompt: "Create a new list",
+        fields: vec![
+          TextInputModalField {
+            name: "Name",
+            node_ref: modal_refs[0].clone(),
+            placeholder: Some("required"),
+            required: true,
+          },
+          TextInputModalField {
+            name: "Shop",
+            node_ref: modal_refs[1].clone(),
+            placeholder: Some("optional"),
+            required: false,
+          },
+        ]
+        .into(),
+        actions: vec![
+          TextInputModalButton {
+            prompt: "Cancel",
+            callback: ctx.link().callback(|_| HomePageMessage::CloseAddListModal),
+          },
+          TextInputModalButton {
+            prompt: "Submit",
+            callback: ctx.link().callback(move |_| {
+              let name = modal_refs[0].cast::<HtmlInputElement>().unwrap().value();
+              if name.is_empty() {
+                return HomePageMessage::Error("You must specify a name for your new list.".into());
+              }
+
+              let shop = modal_refs[1].cast::<HtmlInputElement>().unwrap().value();
+              log::debug!("{shop}");
+
+              HomePageMessage::NewList(name)
+            }),
+          },
+        ],
+      };
 
       html! {
         <div>
           {
           // render list previews
           if !lists.is_empty() {
-            html! {
+            html_nested! {
               <div>
                 {
                   lists.iter().map(|list| {
-                    html! {<ListPreView list={list} />}
+                    html_nested! {<ListPreView list={list} />}
                   })
                   .collect::<Html>()
                 }
-                <p>{"Vier"}</p>
               </div>
             }
           } // or render placeholder
           else {
-            html! {
+            html_nested! {
               <p>{"You do not currently have any lists."}</p>
             }
           }
           }
 
-          <div ref={self.modal_ref.clone()} class="inactive modal-container">
-            <div class="add-list-modal">
-              <p class="modal-item">{"Name:"}</p>  <input class="input modal-item" type="text" placeholder="New list name" />
-              <p class="modal-item">{"Shop - optional:"}</p>  <input type="text" class="input modal-item" placeholder="Shop - TODO" />
-              <button onclick={close_modal}>{"Cancel"}</button>
-            </div>
-          </div>
+         {if self.show_add_list_modal {
+            html! { <TextInputModal ..modal_props /> }
+          }
+          else { // make the typechecker happy
+              html! {}
+            }
+          }
           <div class="add-list floating-button">
             <span onclick={on_add_list_button_pressed}class="material-symbols-outlined button"> {"add"} </span>
           </div>
@@ -254,15 +293,18 @@ impl Component for HomePage {
   }
 
   fn update(&mut self, ctx: &yew::Context<Self>, msg: Self::Message) -> bool {
+    let api: (APIContext, _) = ctx.link().context(Callback::noop()).unwrap();
+    let api = api.0.service;
+
     match msg {
       HomePageMessage::ObjectListFetched(object_list) => {
         self.lists = Some(Vec::with_capacity(object_list.list.len()));
 
         for id in object_list.list {
-          let api = ctx.props().api_service.clone();
+          let api = api.clone();
           ctx.link().send_future(async move {
             match api.get_flat_items_list(id).await {
-              Ok(list) => HomePageMessage::AddList(list),
+              Ok(list) => HomePageMessage::ListFetched(list),
               Err(e) => HomePageMessage::Error(e.to_string()),
             }
           });
@@ -274,9 +316,8 @@ impl Component for HomePage {
         self.logged_in = true;
 
         // if the user is logged in, fetch their lists asynchronously
-        let api_service = ctx.props().api_service.clone();
         ctx.link().send_future(async move {
-          match api_service.get_users_lists().await {
+          match api.get_users_lists().await {
             Ok(ol) => HomePageMessage::ObjectListFetched(ol),
             Err(e) => HomePageMessage::Error(e.to_string()),
           }
@@ -290,32 +331,44 @@ impl Component for HomePage {
         false
       }
       //TODO: Evaluate reducing page refreshes/performance impact
-      HomePageMessage::AddList(list) => {
+      HomePageMessage::ListFetched(list) => {
         self.lists.as_mut().unwrap().push(Some(Rc::new(list)));
 
         true
       }
       HomePageMessage::ShowAddListModal => {
-        let div_element = match self.modal_ref.cast::<HtmlDivElement>() {
-          Some(div) => div,
-          None => return false, // internal error: no modal div so nothing to show
-        };
-        // if the modal is active already, that's okay
-        let _ = div_element.class_list().remove_1("inactive");
+        // TODO: evaluate performance impact
+        self.show_add_list_modal = true;
 
-        false
+        true
       }
       HomePageMessage::CloseAddListModal => {
-        let div_element = match self.modal_ref.cast::<HtmlDivElement>() {
-          Some(div) => div,
-          None => return false, /* internal error but can't occur during normal operation: no modal div so nothing to hide */
-        };
-        // if the modal is hidden already, that's okay
-        let _ = div_element.class_list().add_1("inactive");
+        self.show_add_list_modal = false;
 
         true
       }
       HomePageMessage::None => false,
+      HomePageMessage::NewList(name) => {
+        ctx.link().send_message(HomePageMessage::CloseAddListModal);
+
+        ctx.link().send_future(async move {
+          let mut list = List {
+            id: 0,
+            name,
+            shop: None,
+            image_id: None,
+            items: vec![],
+          };
+          match api.push_new_item_list(&list).await {
+            Ok(id) => {
+              list.id = id;
+              HomePageMessage::ListFetched(FlatItemsList::from_list_and_items(list, vec![]))
+            }
+            Err(e) => HomePageMessage::Error(e.to_string()),
+          }
+        });
+        true
+      }
     }
   }
 }
@@ -370,7 +423,7 @@ impl Component for ListPreView {
 // closures and they therefore have to be passed to async fns
 
 /// Wrapper function for use with yew
-async fn login_callback((name, pw, api_service): (String, String, Arc<APIService>)) -> AuthMessage {
+async fn login_callback((name, pw, api_service): (String, String, Rc<APIService>)) -> AuthMessage {
   match api_service
     .login_v1(&einkaufsliste::model::requests::LoginUserV1 { name, password: pw })
     .await
@@ -381,7 +434,7 @@ async fn login_callback((name, pw, api_service): (String, String, Arc<APIService
 }
 
 /// Wrapper function for use with yew
-async fn register_callback((name, pw, api_service): (String, String, Arc<APIService>)) -> AuthMessage {
+async fn register_callback((name, pw, api_service): (String, String, Rc<APIService>)) -> AuthMessage {
   api_service
     .register_v1(&RegisterUserV1 { name, password: pw })
     .await

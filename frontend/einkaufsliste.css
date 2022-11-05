@@ -1,5 +1,6 @@
 :root {
   --main-bg-color-lightness: 100%;
+  --focus-bg-color-lightness: 50%;
 }
 
 /* ------------------ List Item -----------------*/
@@ -84,20 +85,25 @@
   right: 2rem;
 }
 
-.add-list-modal {
-  background-color: hsl(0, 0%, var(--main-bg-color-lightness));
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  position: absolute;
-  column-gap: 5%;
-  width: 50%;
-  left: 25%;
+.modal-container {
   height: fit-content;
+  width: 50%;
+
+  position: absolute;
+  left: 25%;
   top: 30%;
   z-index: 101;
+
+  background-color: hsl(0, 0%, var(--main-bg-color-lightness));
 }
 
-.modal-container {
+.modal-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 5%;
+}
+
+.modal-background {
   position: absolute;
   top: 0;
   left: 0;
@@ -119,7 +125,7 @@
 }
 
 /* =============== General ===================*/
-.button {
+button {
   display: flex;
   align-content: center;
   justify-content: center;
@@ -129,12 +135,20 @@
   /* TODO: ??? */
 }
 
+.button-list {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-content: center;
+}
+
 .floating-button {
   border-radius: 100%;
 }
 
 .floating-button:hover {
-  background-color: #cccccc;
+  background-color: hsl(0, 0%, --focus-bg-color-lightness);
+  /* background-color: #cccccc; */
   /* TODO: colour concept */
 }
 

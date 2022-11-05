@@ -18,7 +18,6 @@ fn main() {
   let cli = Cli::parse();
   build_frontend(&cli, &project_root);
   copy_files_to_webroot(&project_root);
-  build_backend(&cli);
 
   if cli.run {
     // scoped threads to avoid lifetime issues and unnecessary reference counting; also automatically stops threads when runscript is stopped
@@ -138,7 +137,7 @@ fn find_project_root(path: &Path) -> std::io::Result<&Path> {
 fn build_frontend(args: &Cli, project_root: &Path) {
   let mut command = std::process::Command::new("trunk");
   command
-    .args(["build"]) // activating features through trunk seems broken at the moment -  you should place development-features under default features
+    .args(["build", "--all-features"]) // activating features through trunk seems broken at the moment -  you should place development-features under default features
     .current_dir(format!("{}/frontend", project_root.display()));
 
   // if the backend is built in release mode, we also want to build the frontend in release mode

@@ -197,8 +197,8 @@ impl APIService {
     Ok(shop)
   }
 
-  pub(crate) async fn push_new_item_list(&self, list: List) -> Result<u64, TransmissionError> {
-    let bytes = rkyv::to_bytes::<_, 1024>(&list).map_err(|_| TransmissionError::SerializationError)?;
+  pub(crate) async fn push_new_item_list(&self, list: &List) -> Result<u64, TransmissionError> {
+    let bytes = rkyv::to_bytes::<_, 1024>(list).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
       .lock()

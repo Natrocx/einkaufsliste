@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::sync::Arc;
 
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::FlatItemsList;
@@ -9,6 +8,7 @@ use yew_router::prelude::History;
 use yew_router::scope_ext::RouterScopeExt;
 
 use super::consts::*;
+use super::context::APIContext;
 use super::AppMessage;
 use crate::service::api::APIService;
 use crate::ui::util::CircularLoadingIndicator;
@@ -18,17 +18,10 @@ pub struct ListItemView {
   dropdown_active: bool,
 }
 
-#[derive(Properties)]
+#[derive(PartialEq, Properties)]
 pub struct ListItemProperties {
   pub item: Item,
-  pub change_name_callback: Callback<(Item, Arc<APIService>)>,
-  pub api_service: Arc<APIService>,
-}
-
-impl PartialEq for ListItemProperties {
-  fn eq(&self, other: &Self) -> bool {
-    self.item.eq(&other.item)
-  }
+  pub change_name_callback: Callback<(Item, Rc<APIService>)>,
 }
 
 /// Represents user Interaction with ListItemView
@@ -137,12 +130,13 @@ impl Component for ListItemView {
         true
       }
       ListItemMessage::ChangeName(new) => {
+        let api: APIContext = ctx.link().context(Callback::noop()).unwrap().0;
         ctx.props().change_name_callback.emit((
           Item {
             name: new,
             ..ctx.props().item.clone()
           },
-          ctx.props().api_service.clone(),
+          api.service,
         )); // I guess we have to copy here
         true
       }
@@ -151,32 +145,18 @@ impl Component for ListItemView {
   }
 }
 
-#[derive(Properties, Clone)]
+#[derive(PartialEq, Properties, Clone)]
 pub struct ListProperties {
-  pub(crate) api_service: Arc<APIService>,
   pub(crate) id: u64,
   pub(crate) error_callback: Callback<AppMessage>,
 }
 
-impl PartialEq for ListProperties {
-  fn eq(&self, other: &Self) -> bool {
-    self.api_service.base_url == other.api_service.base_url && self.id == other.id
-  }
-}
-
 pub struct InnerListView {}
 
-#[derive(Properties)]
+#[derive(PartialEq, Properties)]
 pub struct InnerListProperties {
   list: Rc<FlatItemsList>,
-  api_service: Arc<APIService>,
   error_callback: Callback<AppMessage>,
-}
-
-impl PartialEq for InnerListProperties {
-  fn eq(&self, other: &Self) -> bool {
-    self.list.eq(&other.list) && self.api_service.base_url == other.api_service.base_url
-  }
 }
 
 pub enum InnerListMessage {
@@ -194,11 +174,11 @@ impl Component for InnerListView {
   }
 
   fn view(&self, ctx: &Context<Self>) -> Html {
-    let api_service = ctx.props().api_service.clone();
-    // Do not try to replace this with a closure. You will cry.
+    let _context: (APIContext, _) = ctx.link().context(Callback::noop()).unwrap();
+
     let callback = ctx
       .link()
-      .callback_future(|(item, api): (Item, Arc<APIService>)| async move {
+      .callback_future(|(item, api): (Item, Rc<APIService>)| async move {
         match api.update_item(&item).await {
           Ok(_) => InnerListMessage::Noop,
           Err(e) => InnerListMessage::Error(e.to_string()),
@@ -211,7 +191,7 @@ impl Component for InnerListView {
       {
         ctx.props().list.items.iter().map(|item| {
           html! {
-            <ListItemView item={item.clone()} change_name_callback={callback.clone()} api_service={api_service.clone()}/>
+            <ListItemView item={item.clone()} change_name_callback={callback.clone()}/>
           }
         }).collect::<Html>()
       }
@@ -245,9 +225,13 @@ impl Component for ListView {
 
   fn create(ctx: &Context<Self>) -> Self {
     let id = ctx.props().id;
-    let api = ctx.props().api_service.clone();
+    let api: APIContext = ctx
+      .link()
+      .context(Callback::noop())
+      .expect("to be run inside ContextProvider component")
+      .0;
     ctx.link().send_future(async move {
-      match api.get_flat_items_list(id).await {
+      match api.service.get_flat_items_list(id).await {
         Ok(list) => ListMessage::FetchSuccessful(list),
         Err(e) => ListMessage::FetchUnsuccessful(e.to_string()),
       }
@@ -261,7 +245,7 @@ impl Component for ListView {
     html! {
       {
           if self.list.is_some() {
-            let props = InnerListProperties { list: self.list.clone().unwrap(), api_service: ctx.props().api_service.clone(), error_callback: ctx.props().error_callback.clone() };
+            let props = InnerListProperties { list: self.list.clone().unwrap(), error_callback: ctx.props().error_callback.clone() };
             html! {
               <div>
                 <InnerListView ..props />
@@ -293,6 +277,4 @@ impl Component for ListView {
       }
     }
   }
-
-  fn destroy(&mut self, _ctx: &Context<Self>) {}
 }
