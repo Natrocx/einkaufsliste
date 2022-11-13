@@ -40,6 +40,7 @@ impl APIServiceII<Uninitialized> {
   }
 
   pub async fn login(self, command: &LoginUserV1) -> Result<APIServiceII<LoggedIn>, APIServiceII<Uninitialized>> {
+    log::debug!("Attempting to log in user: {command:?}");
     match self.service.login_v1(command).await {
       Ok(_) => Ok(APIServiceII {
         service: self.service,
@@ -50,6 +51,7 @@ impl APIServiceII<Uninitialized> {
   }
 
   pub async fn register(self, command: &RegisterUserV1) -> Result<APIServiceII<LoggedIn>, APIServiceII<Uninitialized>> {
+    log::debug!("Attempting to register user: {command:?}");
     match self.service.register_v1(command).await {
       Ok(_) => Ok(APIServiceII {
         service: self.service,
@@ -135,6 +137,7 @@ impl APIService {
 
   pub(crate) async fn store_shop(&self, shop: Shop) -> Result<u64, TransmissionError> {
     let url = self.build_url("/shop");
+    log::debug!("POST {url} with body: {shop:?}");
 
     let bytes = rkyv::to_bytes::<_, 128>(&shop).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
@@ -162,6 +165,7 @@ impl APIService {
 
   pub async fn get_item(&self, id: u64) -> Result<Item, TransmissionError> {
     let url = self.build_url_with_id("/item", id);
+    log::debug!("GET {url}");
 
     let response = self.http_client.lock().await.get(url).send().await?;
 
@@ -170,6 +174,7 @@ impl APIService {
 
   pub(crate) async fn get_shop(&self, id: u64) -> Result<Shop, TransmissionError> {
     let url = self.build_url_with_id("/shop", id);
+    log::debug!("GET {url}");
 
     let response = self
       .http_client
@@ -198,6 +203,8 @@ impl APIService {
   }
 
   pub(crate) async fn push_new_item_list(&self, list: &List) -> Result<u64, TransmissionError> {
+    log::debug!("POST /itemList with body: {list:?}");
+
     let bytes = rkyv::to_bytes::<_, 1024>(list).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
@@ -223,11 +230,14 @@ impl APIService {
   }
 
   pub(crate) async fn get_flat_items_list(&self, id: u64) -> Result<FlatItemsList, TransmissionError> {
+    let url = format!("{}/itemList/{}/flat", self.base_url, id);
+    log::debug!("GET {url}");
+
     let response = self
       .http_client
       .lock()
       .await
-      .get(format!("{}/itemList/{}/flat", self.base_url, id))
+      .get(url)
       .send()
       .await
       .map_err(TransmissionError::NetworkError)?;
@@ -252,6 +262,7 @@ impl APIService {
 
   pub(crate) async fn push_item_attached(&self, command: StoreItemAttached) -> Result<u64, TransmissionError> {
     let url = self.build_url("/item/attached");
+    log::debug!("POST {url} with body; {command:?}");
 
     let bytes = rkyv::to_bytes::<_, 256>(&command).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
@@ -273,6 +284,7 @@ impl APIService {
 
   pub(crate) async fn register_v1(&self, command: &RegisterUserV1) -> Result<u64, TransmissionError> {
     let url = self.build_url("/register/v1");
+    log::debug!("POST {url} with body {command:?}");
 
     let bytes = rkyv::to_bytes::<_, 256>(command).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
@@ -337,13 +349,14 @@ impl APIService {
 
   pub async fn update_item(&self, item: &Item) -> Result<(), TransmissionError> {
     let url = self.build_url("/item/v1");
+    log::debug!("PUT {url} with body {item:?}");
 
     let bytes = rkyv::to_bytes::<_, 256>(item).map_err(|_| TransmissionError::SerializationError)?;
     let response = self
       .http_client
       .lock()
       .await
-      .post(url)
+      .post(url) // TODO: change to put
       .body(bytes.into_vec())
       .send()
       .await
@@ -357,6 +370,7 @@ impl APIService {
 
   pub async fn get_users_lists(&self) -> Result<ObjectList, TransmissionError> {
     let url = format!("{}/user/lists", self.base_url);
+    log::debug!("GET {url}");
 
     let response = self.http_client.lock().await.get(&url).send().await?;
 
@@ -364,4 +378,5 @@ impl APIService {
 
     Ok(lists)
   }
+
 }

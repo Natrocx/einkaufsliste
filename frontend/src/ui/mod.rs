@@ -1,18 +1,19 @@
 use std::rc::Rc;
 
-use einkaufsliste::model::list::{FlatItemsList, List};
+
 use einkaufsliste::model::requests::RegisterUserV1;
-use einkaufsliste::model::user::ObjectList;
+
 use gloo_timers::future::TimeoutFuture;
 use log::info;
-use web_sys::{HtmlDivElement, HtmlElement, HtmlInputElement};
-use yew::{html, html_nested, Callback, Component, ContextProvider, Html, NodeRef, Properties};
+use web_sys::{HtmlDivElement, HtmlElement};
+use yew::{html, Component, ContextProvider, Html, NodeRef};
 use yew_router::{BrowserRouter, Switch};
 
 use self::auth::*;
 use self::context::APIContext;
 use self::modal::*;
 use crate::service::api::APIService;
+use crate::ui::home::HomePage;
 use crate::ui::list::{ListProperties, ListView};
 use crate::ui::util::CircularLoadingIndicator;
 use crate::util::routing::Page;
@@ -20,6 +21,7 @@ use crate::util::routing::Page;
 mod auth;
 mod consts;
 pub mod context;
+pub mod home;
 mod list;
 pub mod modal;
 mod util;
@@ -55,9 +57,10 @@ impl Component for App {
   fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
     let context = APIContext {
       service: self.api_service.clone(),
+      app_callback: ctx.link().callback(|msg| msg),
     };
 
-    let error_callback = ctx.link().callback(|message: AppMessage| message);
+    let _error_callback = ctx.link().callback(|message: AppMessage| message);
     html! {
       <div>
         <div class="header">
@@ -66,7 +69,7 @@ impl Component for App {
 
         <ContextProvider<APIContext> context={context} >
           <BrowserRouter>
-            <Switch<Page> render={ Switch::render(move |route| { switch(route, error_callback.clone())}) } />
+            <Switch<Page> render={ Switch::render(switch) } />
           </BrowserRouter>
         </ContextProvider<APIContext>>
 
@@ -121,14 +124,11 @@ impl App {
   }
 }
 
-fn switch(route: &Page, app_callback: Callback<AppMessage>) -> Html {
+fn switch(route: &Page) -> Html {
   match route {
-    Page::Overview => html!(<HomePage app_callback={app_callback}/>),
+    Page::Overview => html!(<HomePage />),
     Page::List { name: _, id } => {
-      let props = ListProperties {
-        id: *id,
-        error_callback: app_callback,
-      };
+      let props = ListProperties { id: *id };
       html! {<ListView ..props />}
     }
     Page::Settings => todo!(),
@@ -149,272 +149,6 @@ async fn reset_error(error_node_ref: NodeRef, timeout: TimeoutFuture) -> AppMess
 
   AppMessage::NoOp
 }
-
-pub struct HomePage {
-  lists: Option<Vec<Option<Rc<FlatItemsList>>>>,
-  logged_in: bool,
-  show_add_list_modal: bool,
-}
-
-#[derive(Debug, PartialEq, Properties)]
-pub struct HomePageProperties {
-  pub app_callback: Callback<AppMessage>,
-}
-
-pub enum HomePageMessage {
-  ListFetched(FlatItemsList),
-  ObjectListFetched(ObjectList),
-  LoginSuccessful(u64),
-  NewList(String),
-  ShowAddListModal,
-  CloseAddListModal,
-  Error(String),
-  None,
-}
-
-impl Component for HomePage {
-  type Message = HomePageMessage;
-
-  type Properties = HomePageProperties;
-
-  fn create(_ctx: &yew::Context<Self>) -> Self {
-    Self {
-      lists: None,
-      logged_in: false,
-      show_add_list_modal: false,
-    }
-  }
-
-  #[allow(clippy::let_unit_value)]
-  fn view(&self, ctx: &yew::Context<Self>) -> Html {
-    if !self.logged_in {
-      let auth_callback = ctx.link().callback(|msg| match msg {
-        Ok(user_id) => HomePageMessage::LoginSuccessful(user_id),
-        Err(reason) => HomePageMessage::Error(reason),
-      });
-      let props = AuthProperties {
-        submit_callback: auth_callback,
-        cancel_callback: None,
-      };
-
-      html! {
-        <div>
-          <AuthView ..props />
-        </div>
-      }
-    } else if self.lists.is_none() {
-      html! {
-        <div class="list-loading">
-          <CircularLoadingIndicator />
-        </div>
-      }
-    } else {
-      let lists = self.lists.as_ref().unwrap();
-
-      let on_add_list_button_pressed = ctx.link().callback(|_| HomePageMessage::ShowAddListModal);
-
-      let modal_refs = vec![NodeRef::default(); 2];
-
-      let modal_props = TextInputModalProps {
-        prompt: "Create a new list",
-        fields: vec![
-          TextInputModalField {
-            name: "Name",
-            node_ref: modal_refs[0].clone(),
-            placeholder: Some("required"),
-            required: true,
-          },
-          TextInputModalField {
-            name: "Shop",
-            node_ref: modal_refs[1].clone(),
-            placeholder: Some("optional"),
-            required: false,
-          },
-        ]
-        .into(),
-        actions: vec![
-          TextInputModalButton {
-            prompt: "Cancel",
-            callback: ctx.link().callback(|_| HomePageMessage::CloseAddListModal),
-          },
-          TextInputModalButton {
-            prompt: "Submit",
-            callback: ctx.link().callback(move |_| {
-              let name = modal_refs[0].cast::<HtmlInputElement>().unwrap().value();
-              if name.is_empty() {
-                return HomePageMessage::Error("You must specify a name for your new list.".into());
-              }
-
-              let shop = modal_refs[1].cast::<HtmlInputElement>().unwrap().value();
-              log::debug!("{shop}");
-
-              HomePageMessage::NewList(name)
-            }),
-          },
-        ],
-      };
-
-      html! {
-        <div>
-          {
-          // render list previews
-          if !lists.is_empty() {
-            html_nested! {
-              <div>
-                {
-                  lists.iter().map(|list| {
-                    html_nested! {<ListPreView list={list} />}
-                  })
-                  .collect::<Html>()
-                }
-              </div>
-            }
-          } // or render placeholder
-          else {
-            html_nested! {
-              <p>{"You do not currently have any lists."}</p>
-            }
-          }
-          }
-
-         {if self.show_add_list_modal {
-            html! { <TextInputModal ..modal_props /> }
-          }
-          else { // make the typechecker happy
-              html! {}
-            }
-          }
-          <div class="add-list floating-button">
-            <span onclick={on_add_list_button_pressed}class="material-symbols-outlined button"> {"add"} </span>
-          </div>
-        </div>
-      }
-    }
-  }
-
-  fn update(&mut self, ctx: &yew::Context<Self>, msg: Self::Message) -> bool {
-    let api: (APIContext, _) = ctx.link().context(Callback::noop()).unwrap();
-    let api = api.0.service;
-
-    match msg {
-      HomePageMessage::ObjectListFetched(object_list) => {
-        self.lists = Some(Vec::with_capacity(object_list.list.len()));
-
-        for id in object_list.list {
-          let api = api.clone();
-          ctx.link().send_future(async move {
-            match api.get_flat_items_list(id).await {
-              Ok(list) => HomePageMessage::ListFetched(list),
-              Err(e) => HomePageMessage::Error(e.to_string()),
-            }
-          });
-        }
-
-        true
-      }
-      HomePageMessage::LoginSuccessful(user_id) => {
-        self.logged_in = true;
-
-        // if the user is logged in, fetch their lists asynchronously
-        ctx.link().send_future(async move {
-          match api.get_users_lists().await {
-            Ok(ol) => HomePageMessage::ObjectListFetched(ol),
-            Err(e) => HomePageMessage::Error(e.to_string()),
-          }
-        });
-        ctx.props().app_callback.emit(AppMessage::LoginSuccessful(user_id));
-        true
-      }
-      HomePageMessage::Error(reason) => {
-        // Pass up the token tree to use centralised error handling
-        ctx.props().app_callback.emit(AppMessage::Error(reason));
-        false
-      }
-      //TODO: Evaluate reducing page refreshes/performance impact
-      HomePageMessage::ListFetched(list) => {
-        self.lists.as_mut().unwrap().push(Some(Rc::new(list)));
-
-        true
-      }
-      HomePageMessage::ShowAddListModal => {
-        // TODO: evaluate performance impact
-        self.show_add_list_modal = true;
-
-        true
-      }
-      HomePageMessage::CloseAddListModal => {
-        self.show_add_list_modal = false;
-
-        true
-      }
-      HomePageMessage::None => false,
-      HomePageMessage::NewList(name) => {
-        ctx.link().send_message(HomePageMessage::CloseAddListModal);
-
-        ctx.link().send_future(async move {
-          let mut list = List {
-            id: 0,
-            name,
-            shop: None,
-            image_id: None,
-            items: vec![],
-          };
-          match api.push_new_item_list(&list).await {
-            Ok(id) => {
-              list.id = id;
-              HomePageMessage::ListFetched(FlatItemsList::from_list_and_items(list, vec![]))
-            }
-            Err(e) => HomePageMessage::Error(e.to_string()),
-          }
-        });
-        true
-      }
-    }
-  }
-}
-
-pub struct ListPreView;
-
-#[derive(Clone, PartialEq, Eq, Properties)]
-pub struct ListPreviewProperties {
-  list: Option<Rc<FlatItemsList>>,
-}
-
-impl Component for ListPreView {
-  type Message = ();
-
-  type Properties = ListPreviewProperties;
-
-  fn create(_ctx: &yew::Context<Self>) -> Self {
-    Self {}
-  }
-
-  #[allow(clippy::let_unit_value)]
-  fn view(&self, ctx: &yew::Context<Self>) -> yew::Html {
-    html! {
-      <div class="list-preview-container">
-        {
-          if let Some(list) = ctx.props().list.clone() {
-            if let Some(image_id) = list.image_id {
-            let url = format!("https://localhost:8443/image/{}", image_id);
-              html! { <img src={url}  alt={format!("List picture for: {}", list.name)} /> }
-            }
-            // if there is no
-            else {
-              html! {}
-            }
-        }
-          else {
-            html! {
-              <CircularLoadingIndicator />
-            }
-          }
-        }
-      </div>
-    }
-  }
-}
-
 // ============================ api helpers ===================================
 // used to convert generic APIService returns to yew component messages
 // this is only preferable over closures, since we are dealing with async here

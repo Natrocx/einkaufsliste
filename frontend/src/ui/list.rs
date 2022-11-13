@@ -148,7 +148,6 @@ impl Component for ListItemView {
 #[derive(PartialEq, Properties, Clone)]
 pub struct ListProperties {
   pub(crate) id: u64,
-  pub(crate) error_callback: Callback<AppMessage>,
 }
 
 pub struct InnerListView {}
@@ -156,7 +155,6 @@ pub struct InnerListView {}
 #[derive(PartialEq, Properties)]
 pub struct InnerListProperties {
   list: Rc<FlatItemsList>,
-  error_callback: Callback<AppMessage>,
 }
 
 pub enum InnerListMessage {
@@ -203,7 +201,8 @@ impl Component for InnerListView {
     match msg {
       InnerListMessage::Noop => false,
       InnerListMessage::Error(message) => {
-        ctx.props().error_callback.emit(AppMessage::Error(message));
+        let context: APIContext = ctx.link().context(Callback::noop()).unwrap().0;
+        context.app_callback.emit(AppMessage::Error(message));
         false
       }
     }
@@ -241,14 +240,13 @@ impl Component for ListView {
   }
 
   #[allow(clippy::let_unit_value)]
-  fn view(&self, ctx: &Context<Self>) -> Html {
+  fn view(&self, _ctx: &Context<Self>) -> Html {
     html! {
       {
           if self.list.is_some() {
-            let props = InnerListProperties { list: self.list.clone().unwrap(), error_callback: ctx.props().error_callback.clone() };
             html! {
               <div>
-                <InnerListView ..props />
+                <InnerListView list={self.list.clone().unwrap()} />
               </div>
             }
           }
@@ -271,7 +269,8 @@ impl Component for ListView {
       }
       ListMessage::FetchUnsuccessful(message) => {
         // if the list could not be loaded, print error message and go back (there is nothing the user can do here)
-        ctx.props().error_callback.emit(AppMessage::Error(message));
+        let context: APIContext = ctx.link().context(Callback::noop()).unwrap().0;
+        context.app_callback.emit(AppMessage::Error(message));
         ctx.link().history().unwrap().go(-1);
         true
       }

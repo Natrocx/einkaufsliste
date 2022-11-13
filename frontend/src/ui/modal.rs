@@ -14,7 +14,7 @@ pub struct TextInputModal;
 //TODO: evaluate generified modal: fields may be an enum over field type like: text, number, radio
 //TODO: evaluate field verifiers
 
-#[derive(PartialEq, Properties)]
+#[derive(PartialEq, Properties, Clone, Debug)]
 pub struct TextInputModalProps {
   /// A title/prompt for the modal, so the user knows what they are doing
   pub prompt: &'static str,
@@ -51,12 +51,7 @@ impl Component for TextInputModal {
       let fields = ctx.props().fields.clone();
       Some(ctx.link().callback(move |event: KeyboardEvent| {
         let key = event.key();
-        if key.eq("Enter") &&
-          fields
-            .iter()
-            .filter(|field| field.required)
-            .all(|field| !field.node_ref.cast::<HtmlInputElement>().unwrap().value().is_empty())
-        {
+        if key.eq("Enter") && check_required_fields(&fields) {
           callback.emit(());
         }
       }))
@@ -112,4 +107,11 @@ impl Component for TextInputModal {
       }
     }
   }
+}
+
+pub fn check_required_fields(fields: &[TextInputModalField]) -> bool {
+  fields
+    .iter()
+    .filter(|field| field.required)
+    .all(|field| !field.node_ref.cast::<HtmlInputElement>().unwrap().value().is_empty())
 }

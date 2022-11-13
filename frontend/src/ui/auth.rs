@@ -1,25 +1,27 @@
+use std::rc::Rc;
+
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use web_sys::{HtmlInputElement, KeyboardEvent, MouseEvent};
 use yew::{html, Callback, Component, Html, NodeRef, Properties};
 
 use super::context::APIContext;
-use super::modal::{TextInputModalButton, TextInputModalField, TextInputModalProps};
+use super::modal::{ TextInputModalButton, TextInputModalField, TextInputModalProps};
+use super::AppMessage;
 use crate::ok_or_log;
 use crate::ui::TextInputModal;
-#[derive(Default)]
-pub struct AuthModal {}
+pub struct AuthModal {
+  props: TextInputModalProps
+}
 
 impl Component for AuthModal {
   type Message = ();
 
   type Properties = AuthProperties;
 
-  fn create(_ctx: &yew::Context<Self>) -> Self {
-    Self::default()
-  }
+  fn create(ctx: &yew::Context<Self>) -> Self {
 
-  fn view(&self, ctx: &yew::Context<Self>) -> Html {
     let node_refs = [NodeRef::default(), NodeRef::default()];
-    let fields = vec![
+    let fields = Rc::new(vec![
       TextInputModalField {
         name: "Username",
         node_ref: node_refs[0].clone(),
@@ -32,17 +34,55 @@ impl Component for AuthModal {
         placeholder: Some("Enter your password here"),
         required: true,
       },
-    ]
-    .into();
+    ]);
+
+    let context: APIContext = ctx.link().context(Callback::noop()).unwrap().0;
+    let _context = context.clone();
+    let _node_refs = node_refs.clone();
+    let success_callback = ctx.props().submit_callback.clone();
+    let _fields = fields.clone();
+
+    let login_callback = ctx.link().callback_future(move |_| {
+      // prepare ownership/lifetimes for move into async closure
+      let name = _node_refs[0].cast::<HtmlInputElement>().unwrap().value();
+      let password = _node_refs[1].cast::<HtmlInputElement>().unwrap().value();
+      let api = _context.service.clone();
+      let success_callback = success_callback.clone();
+      let error_callback = _context.app_callback.clone();
+
+      async move {
+          match api.login_v1(&LoginUserV1 { name, password }).await {
+            Ok(id) => success_callback.emit(Ok(id)),
+            Err(e) => error_callback.emit(AppMessage::Error(e.to_string())),
+        }
+      }
+    });
+
+    let success_callback = ctx.props().submit_callback.clone();
+    let _fields = fields.clone();
 
     let mut actions = vec![
       TextInputModalButton {
-        prompt: "Login",
-        callback: ctx.link().callback(|_| {}),
+        prompt: "Register",
+        callback: ctx.link().callback_future(move |_| {
+          // prepare ownership/lifetimes for move into async closure
+          let name = node_refs[0].cast::<HtmlInputElement>().unwrap().value();
+          let password = node_refs[1].cast::<HtmlInputElement>().unwrap().value();
+          let api = context.service.clone();
+          let success_callback = success_callback.clone();
+          let error_callback = context.app_callback.clone();
+
+          async move {
+              match api.register_v1(&RegisterUserV1 { name, password }).await {
+                Ok(id) => success_callback.emit(Ok(id)),
+                Err(e) => error_callback.emit(AppMessage::Error(e.to_string())),
+            }
+          }
+        }),
       },
       TextInputModalButton {
-        prompt: "Register",
-        callback: ctx.link().callback(|_| {}),
+        prompt: "Login",
+        callback: login_callback,
       },
     ];
 
@@ -55,15 +95,30 @@ impl Component for AuthModal {
       });
     };
 
-    let modal_props = TextInputModalProps {
+    let props = TextInputModalProps {
       prompt: "Login or register",
       fields,
       actions,
     };
 
-    html! {
-      <TextInputModal ..modal_props />
+    Self {
+      props
     }
+  }
+
+  fn view(&self, ctx: &yew::Context<Self>) -> Html {
+    html! {
+      <TextInputModal ..self.props.clone() />
+    }
+  }
+
+  /**
+   * Enable special password handling imperatively, until this is integrated with the Modal
+   */
+  fn rendered(&mut self, ctx: &yew::Context<Self>, first_render: bool) {
+      if first_render {
+        self.props.fields[1].node_ref.cast::<HtmlInputElement>().unwrap().set_type("password");
+      }
   }
 }
 

@@ -6,7 +6,7 @@ use super::{HasTypeDenominator, Identifiable};
 #[cfg(feature = "backend")]
 use crate::impl_from_request;
 
-#[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct List {
   pub id: <List as Identifiable>::Id,
