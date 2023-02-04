@@ -19,7 +19,7 @@ rkyv = { version = "0.7.39", features = [
   "archive_be",
 ] }
 sled = "0.34.7"
-tokio = "1.21.2"
+tokio = "1.24.2"
 zerocopy = "0.6.1"
 einkaufsliste = { path = "../", features = ["backend"] }
 rustls = "0.20.6"
