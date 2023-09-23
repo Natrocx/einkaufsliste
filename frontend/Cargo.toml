@@ -19,25 +19,13 @@ einkaufsliste = { path = "../" }
 bytes = "1.2.1"
 zerocopy = "0.6.1"
 futures = "0.3.24"
-yew = "0.19.3"
-web-sys = { version = "0.3.60", features = [
-  "Element",
-  "HtmlElement",
-  "Node",
-  "DomTokenList",
-  "Window",
-  "HtmlDivElement",
-] }
 log = "0.4.17"
-console_log = { version = "0.2.0", features = ["color"] }
-gloo-timers = { version = "0.2.4", features = ["futures"] }
-yew-router = "0.16.0"
-einkaufsliste-codegen = { path = "../codegen" }
+dioxus = "0.3"
+dioxus-desktop = "0.3"
+dioxus-router = "0.3"
+fern = "0.6.1"
+chrono = "0.4.23"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 rand = "*"
-
-[features]
-default = ["dev_router"]
-dev_router = []

@@ -8,12 +8,30 @@ use std::fmt::Display;
 use log::Level;
 use reqwest::StatusCode;
 use rkyv::validation::validators::CheckDeserializeError;
-use ui::App;
 
 fn main() {
-  console_log::init_with_level(Level::Debug).unwrap();
-  yew::start_app::<App>();
+  setup_logger().unwrap();
+  dioxus_desktop::launch(ui::app);
 }
+
+fn setup_logger() -> Result<(), fern::InitError> {
+  fern::Dispatch::new()
+    .format(|out, message, record| {
+      out.finish(format_args!(
+        "{}[{}][{}] {}",
+        chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+        record.target(),
+        record.level(),
+        message
+      ))
+    })
+    .level(log::LevelFilter::Debug)
+    .chain(std::io::stdout())
+    .chain(fern::log_file("output.log")?)
+    .apply()?;
+  Ok(())
+}
+
 #[derive(Debug)]
 pub enum TransmissionError {
   SerializationError,

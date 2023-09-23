@@ -378,5 +378,4 @@ impl APIService {
 
     Ok(lists)
   }
-
 }
