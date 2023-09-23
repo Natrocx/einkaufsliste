@@ -6,7 +6,7 @@ use super::{HasTypeDenominator, Identifiable};
 #[cfg(feature = "backend")]
 use crate::impl_from_request;
 
-#[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct List {
   pub id: <List as Identifiable>::Id,
@@ -19,7 +19,7 @@ pub struct List {
 #[cfg(feature = "backend")]
 impl_from_request!(List);
 
-#[derive(Archive, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type

@@ -22,7 +22,7 @@ pub trait Identifiable {
 }
 
 /// Access-control-list for all kinds of data objects. Warning: if your ids are generated in an overlapping way, you must seperate the AccessControlLists in seperate DBs/keyspaces
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct AccessControlList<Object: Identifiable, User: Identifiable> {
   pub object_id: Object::Id,

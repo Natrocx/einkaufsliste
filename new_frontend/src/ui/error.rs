@@ -1,7 +1,6 @@
 use std::collections::HashSet;
-use std::hash::Hash;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::rc::Rc;
+
 
 use async_std::sync::Mutex;
 use dioxus::prelude::*;
@@ -34,13 +33,13 @@ impl ErrorHandler {
 
 #[derive(Clone)]
 pub struct ErrorService {
-  handler: Arc<Mutex<ErrorHandler>>,
+  handler: Rc<Mutex<ErrorHandler>>,
 }
 
 impl ErrorService {
   pub fn new(state: UseRef<HashSet<String>>) -> Self {
     Self {
-      handler: Arc::new(Mutex::new(ErrorHandler { errors: state })),
+      handler: Rc::new(Mutex::new(ErrorHandler { errors: state })),
     }
   }
 
@@ -61,9 +60,9 @@ pub fn error_handler<'a>(cx: Scope<'a>, children: Element<'a>) -> Element<'a> {
       children,
       div { "Error provider - test" }
       errors.read().iter().map(|error| {
-                      rsx! {
-                        p { error.as_str() }
-                      }
-                    })
+                        rsx! {
+                          p { error.as_str() }
+                        }
+                      })
   })
 }

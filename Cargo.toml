@@ -7,27 +7,27 @@ license = "AGPL-3.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytecheck = "0.6.9"
-rkyv = { version = "0.7.39", features = [
+bytecheck = "0.6.11"
+rkyv = { version = "0.7.42", features = [
   "bytecheck",
   "validation",
   "archive_be",
 ] }
 zerocopy = "0.6.1"
-einkaufsliste-codegen = { version = "*", path = "./codegen" }
 
 actix-web = { version = "4", optional = true }
 bytes = { version = "1", optional = true }
 futures = { version = "0", optional = true }
-async-trait = { version = "0.1.57", optional = true }
+async-trait = { version = "0.1.68", optional = true }
 log = { version = "*", optional = true }
+serde = { version = "1.0.164", features = ["derive"] }
 
 [features]
 default = []
 backend = ["actix-web", "bytes", "futures", "async-trait", "log"]
 
 [workspace]
-members = ["frontend", "backend", "codegen", "runner"]
+members = ["new_frontend", "backend", "runner"]
 
 [lib]
 path = "lib/lib.rs"

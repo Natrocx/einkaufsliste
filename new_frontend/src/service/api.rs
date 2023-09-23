@@ -1,19 +1,19 @@
 use std::cell::Cell;
 use std::ops::Deref;
-use std::path::Display;
-use std::sync::Arc;
+use std::rc::Rc;
+
 
 use einkaufsliste::model::requests::LoginUserV1;
 
 #[derive(Clone)]
 pub struct ApiService {
-  inner: Arc<ApiClient>,
+  inner: Rc<ApiClient>,
 }
 
 impl ApiService {
   pub fn new(base_url: String) -> Result<Self, APIError> {
     Ok(Self {
-      inner: Arc::new(ApiClient::new(base_url)?),
+      inner: Rc::new(ApiClient::new(base_url)?),
     })
   }
 }
@@ -22,7 +22,7 @@ impl Deref for ApiService {
   type Target = ApiClient;
 
   fn deref(&self) -> &Self::Target {
-    &*self.inner
+    &self.inner
   }
 }
 
@@ -60,7 +60,7 @@ impl ApiClient {
   }
 
   pub async fn login(&self, credentials: LoginUserV1) -> Result<u64, APIError> {
-    let mut response = self
+    let response = self
       .client
       .post("/login/v1")
       .body(self.encode(&credentials)?)

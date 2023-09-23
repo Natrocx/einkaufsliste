@@ -5,7 +5,7 @@ use super::Identifiable;
 #[cfg(feature = "backend")]
 use crate::impl_from_request;
 
-#[derive(Archive, Serialize, Deserialize, Debug)]
+#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct Article {
   pub id: <Article as Identifiable>::Id,

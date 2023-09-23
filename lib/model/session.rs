@@ -7,7 +7,7 @@ use super::Identifiable;
 
 pub type SessionState = HashMap<String, String>;
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
 pub struct Session {
   pub time_to_logout: i64,

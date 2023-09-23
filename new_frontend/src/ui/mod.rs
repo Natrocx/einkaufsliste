@@ -1,4 +1,3 @@
-use dioxus::html::nav;
 use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 
@@ -8,10 +7,8 @@ pub mod auth;
 pub mod error;
 pub mod home;
 
-pub struct Application;
-
 pub fn app(cx: Scope) -> Element {
-  let api_service = cx.provide_context(ApiService::new("https://localhost:8443".into()).unwrap());
+  let _api_service = cx.provide_context(ApiService::new("https://localhost:8443".into()).unwrap());
 
   cx.render(rsx! {
       error::error_handler { Router::<Route> {} }
@@ -22,7 +19,7 @@ pub fn app(cx: Scope) -> Element {
 fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let navigator = use_navigator(cx).clone();
   // a use_future that waits for 1 second to pass
-  let timeout = use_future(cx, (), |_| async move {
+  let _timeout = use_future(cx, (), |_| async move {
     async_std::task::sleep(std::time::Duration::from_secs(1)).await;
     navigator.push(Route::Home);
   });

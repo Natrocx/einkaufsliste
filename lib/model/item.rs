@@ -5,7 +5,7 @@ use super::Identifiable;
 #[cfg(feature = "backend")]
 use crate::impl_from_request;
 
-#[derive( Archive, Serialize, Deserialize, Clone, Debug)]
+#[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Item {
   pub id: <Item as Identifiable>::Id,
@@ -19,7 +19,7 @@ pub struct Item {
 #[cfg(feature = "backend")]
 impl_from_request!(Item);
 
-#[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub enum Unit {
   Gram,
