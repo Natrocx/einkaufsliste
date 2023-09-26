@@ -2,8 +2,13 @@ use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
 
-
+use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::LoginUserV1;
+
+use rkyv::de::deserializers::{SharedDeserializeMap};
+use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
+
+use rkyv::{CheckBytes};
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -62,7 +67,7 @@ impl ApiClient {
   pub async fn login(&self, credentials: LoginUserV1) -> Result<u64, APIError> {
     let response = self
       .client
-      .post("/login/v1")
+      .post(format!("{}/login/v1", self.base_url))
       .body(self.encode(&credentials)?)
       .send()
       .await?;
@@ -79,6 +84,18 @@ impl ApiClient {
     Ok(body)
   }
 
+  pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
+    let response = self.client.get("/user/lists").send().await?;
+
+    let body = self.decode(response.bytes().await?.as_ref())?;
+
+    Ok(body)
+  }
+
+  pub fn get_img_url(&self, image_id: u64) -> String {
+    format!("{}/image/{}", self.base_url, image_id)
+  }
+
   /**
   This function is used to encode data into the negotiated encoding.
 
@@ -92,6 +109,18 @@ impl ApiClient {
     match encoding {
       Encoding::JSON => Ok(serde_json::to_vec(data)?),
       Encoding::Rkyv => Ok(rkyv::to_bytes(data)?.to_vec()),
+    }
+  }
+
+  fn decode<'a, T>(&self, data: &'a [u8]) -> Result<T, APIError>
+  where
+    T: serde::de::DeserializeOwned + rkyv::Archive,
+    T::Archived: 'a + rkyv::Deserialize<T, SharedDeserializeMap> + CheckBytes<DefaultValidator<'a>>,
+  {
+    let encoding = self.negotiated_encoding.get();
+    match encoding {
+      Encoding::JSON => Ok(serde_json::from_slice(data)?),
+      Encoding::Rkyv => Ok(rkyv::from_bytes(data)?),
     }
   }
 }
@@ -154,5 +183,11 @@ impl From<reqwest::Error> for APIError {
 impl<S, T, H> From<rkyv::ser::serializers::CompositeSerializerError<S, T, H>> for APIError {
   fn from(_value: rkyv::ser::serializers::CompositeSerializerError<S, T, H>) -> Self {
     Self::Encoding
+  }
+}
+
+impl<C: std::error::Error, D: std::error::Error> From<CheckDeserializeError<C, D>> for APIError {
+  fn from(_: CheckDeserializeError<C, D>) -> Self {
+    Self::Decoding
   }
 }

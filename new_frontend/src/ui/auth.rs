@@ -1,12 +1,10 @@
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::requests::LoginUserV1;
 
 
-use super::error::{ErrorService};
-use crate::service::api::{ApiService};
-
+use super::error::ErrorService;
+use crate::service::api::ApiService;
 
 pub fn authentication_form(cx: Scope) -> Element {
   let _api: ApiService = cx.consume_context()?;

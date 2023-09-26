@@ -113,10 +113,20 @@ pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identit
   let user_id = identity.parse()?;
 
   // read ObjectList from DB
-  let list = <db::DbState as db::ObjectStore<List, sled::Tree, 512>>::object_list(&state, user_id)?;
-  debug!("{:?}", list);
+  let list_ids =
+    <db::DbState as db::ObjectStore<List, sled::Tree, 512>>::object_list(&state, user_id)?;
 
-  Response::from(&list)
+  let lists = list_ids
+    .list
+    .into_iter()
+    .map(|id| {
+      let list =
+        unsafe { <sled::Tree as db::RawRkyvStore<List, 512>>::get_unchecked(&state.list_db, id)? };
+      Ok(list)
+    })
+    .collect::<Result<Vec<_>, ResponseError>>()?;
+
+  Response::from(&lists)
 }
 
 pub fn login_user(
