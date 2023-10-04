@@ -3,7 +3,7 @@ use std::str::FromStr;
 use actix_web::http::header::ContentType;
 use mime::Mime;
 
-use crate::util::errors::{error, not_found};
+
 
 /**
  * WARNING THIS IS INSECURE

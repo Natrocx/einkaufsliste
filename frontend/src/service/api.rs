@@ -5,17 +5,17 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use async_std::sync::Mutex;
+
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
 #[cfg(not(target_arch = "wasm32"))]
-use reqwest_cookie_store::{CookieStoreMutex, CookieStoreRwLock};
+use reqwest_cookie_store::{CookieStoreMutex};
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
 use rkyv::CheckBytes;
 use tracing::debug;
-use tracing_subscriber::field::debug;
+
 
 /*
  This file contains the API client and a reference counted Service for use in dioxus.
@@ -134,7 +134,7 @@ impl ApiClient {
 
     let body_bytes = response.error_for_status()?.bytes().await?;
 
-    let user = self.decode(&*body_bytes)?;
+    let user = self.decode(&body_bytes)?;
 
     Ok(user)
   }
@@ -150,7 +150,7 @@ impl ApiClient {
 
     let body_bytes = response.error_for_status()?.bytes().await?;
 
-    let user = self.decode(&*body_bytes)?;
+    let user = self.decode(&body_bytes)?;
 
     Ok(user)
   }
@@ -161,7 +161,7 @@ impl ApiClient {
 
     let body = response.error_for_status()?.bytes().await?;
 
-    let lists = self.decode(&*body)?;
+    let lists = self.decode(&body)?;
 
     Ok(lists)
   }

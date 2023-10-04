@@ -1,13 +1,13 @@
-use dioxus::html::button;
+
 use dioxus::prelude::*;
-use dioxus_router::prelude::{use_navigator, Link};
+use dioxus_router::prelude::{use_navigator};
 use einkaufsliste::model::list::List;
-use einkaufsliste::model::user::User;
-use tracing::debug;
+
+
 
 use super::error::ErrorService;
 use crate::service::api::ApiService;
-use crate::ui::Route;
+
 
 pub fn homepage(cx: Scope) -> Element {
   let error_handler = cx.consume_context::<ErrorService>().unwrap();
@@ -55,9 +55,8 @@ pub fn homepage(cx: Scope) -> Element {
         }
         Err(e) => {
           error_handler.handle_api_error(e).await;
-          return;
         }
-      };
+      }
     })
   };
 

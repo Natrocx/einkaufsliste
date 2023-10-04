@@ -27,7 +27,7 @@ default = []
 backend = ["actix-web", "bytes", "futures", "async-trait", "log"]
 
 [workspace]
-members = ["new_frontend", "backend", "runner"]
+members = ["frontend", "backend"]
 
 [lib]
 path = "lib/lib.rs"
