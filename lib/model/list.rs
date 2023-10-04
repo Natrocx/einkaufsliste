@@ -12,7 +12,7 @@ pub struct List {
   pub id: <List as Identifiable>::Id,
   pub name: String,
   pub shop: Option<<Shop as Identifiable>::Id>,
-  pub image_id: Option<u32>,
+  pub image_id: Option<u64>,
   pub items: Vec<<Item as Identifiable>::Id>,
 }
 
@@ -25,7 +25,7 @@ pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type
   pub name: String,
   pub shop: Option<<Shop as Identifiable>::Id>,
-  pub image_id: Option<u32>,
+  pub image_id: Option<u64>,
   pub items: Vec<Item>,
 }
 

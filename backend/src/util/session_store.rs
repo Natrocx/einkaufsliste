@@ -51,6 +51,7 @@ impl SessionStore for SledSessionStore {
       time_to_logout: Session::get_current_time() + ttl.whole_seconds(),
       state: session_state,
     };
+
     let bytes =
       rkyv::to_bytes::<_, 4096>(&state).map_err(|err| SaveError::Serialization(err.into()))?;
 

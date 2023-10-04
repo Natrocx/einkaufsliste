@@ -82,13 +82,17 @@ async fn main() -> std::io::Result<()> {
 
     app
       .wrap(cors)
-      .wrap(actix_web::middleware::Logger::default())
+      .wrap(actix_web::middleware::Logger::new(
+        "%a %r %s %b %{set-cookie}o %{id}i %{User-Agent}i %T",
+      ))
       .wrap(identity_mw)
       .wrap(
         SessionMiddleware::builder(session_store.clone(), cookie_priv_key.clone())
           .session_lifecycle(PersistentSession::default())
           .cookie_content_security(CookieContentSecurity::Private)
           .cookie_same_site(SameSite::Strict)
+          .cookie_path("/".into())
+          .cookie_domain(None)
           .cookie_secure(true)
           .cookie_http_only(true)
           .build(),

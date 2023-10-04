@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-
 use std::rc::Rc;
 
 use async_std::sync::Mutex;
@@ -13,7 +12,7 @@ struct ErrorHandler {
 }
 impl ErrorHandler {
   pub(crate) fn add_error(&mut self, error: String) {
-    tracing::error!("{error}");
+    tracing::error!("A handled error occured: {error}");
     // we can happily write() here since an error definitely did occur and we do want to rerender
 
     let mut errors = self.errors.write();
@@ -47,9 +46,6 @@ impl ErrorService {
   }
 
   pub async fn handle_api_error(&self, error: crate::service::api::APIError) {
-    // handle geneneral case
-    self.handle_error(error.to_string()).await;
-
     // handle specific cases requiring navigation/user interaction
     let navigation_error = match error {
       APIError::Unauthenticated => self.navigator.push(Route::Authentication),
@@ -58,6 +54,9 @@ impl ErrorService {
     if let Some(error) = navigation_error {
       self.handle_error(format!("{error:?}")).await;
     }
+
+    // handle geneneral case
+    self.handle_error(error.to_string()).await;
   }
 }
 

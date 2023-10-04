@@ -2,6 +2,7 @@ use actix_identity::Identity;
 
 use crate::response::ResponseError;
 
+//TODO: make an extractor out of this
 pub trait IdentityExt {
   fn parse(&self) -> std::result::Result<u64, ResponseError>;
 }

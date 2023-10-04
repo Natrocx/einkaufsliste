@@ -6,6 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+reqwest = { version = "0.11", default-features = false, features = [
+  "rustls-tls",
+  "cookies",
+  "brotli",
+] }
 serde = "1.0.164"
 serde_json = { version = "1.0.99", features = ["alloc"] }
 einkaufsliste = { path = "../" }
@@ -15,14 +20,19 @@ dioxus = "*"
 async-std = "1.12.0"
 tracing = "0.1.37"
 dioxus-router = "0.4.1"
-reqwest = { version = "0.11.20", default-features = false, features = [
-  "rustls-tls",
-  "cookies",
-  "brotli",
-] }
+tracing-subscriber = { version = "0.3.17", features = ["fmt"] }
+url = "2.4.1"
+platform-dirs = "0.3.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus-desktop = "0.4.0"
+sled = "0.34.7"
+reqwest_cookie_store = "0.6.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus-web = "0.4"
+
+
+[features]
+default = ["dev-certificate"]
+dev-certificate = []

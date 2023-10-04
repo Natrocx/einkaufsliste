@@ -11,7 +11,7 @@ default_platform = "web"
 out_dir = "dist"
 
 # resource (public) file folder
-asset_dir = "public"
+#asset_dir = "public"
 
 [web.app]
 
@@ -30,7 +30,8 @@ watch_path = ["src", "public"]
 [web.resource]
 
 # CSS style file
-style = []
+style = ["tailwind.css"]
+
 
 # Javascript code file
 script = []

@@ -3,14 +3,20 @@ use std::str::FromStr;
 use actix_web::http::header::ContentType;
 use mime::Mime;
 
-#[actix_web::get("/dev/{filename}")]
+use crate::util::errors::{error, not_found};
+
+/**
+ * WARNING THIS IS INSECURE
+ * only use for development
+ */
+#[actix_web::get("/dev/{filename:.*}")]
 #[cfg(feature = "serve_frontend")]
 async fn serve_frontend(
   filename: actix_web::web::Path<String>,
 ) -> Result<actix_files::NamedFile, crate::response::ResponseError> {
   use crate::util::errors::bad_request;
 
-  let path = filename.parse::<std::path::PathBuf>().unwrap();
+  let path = filename.parse::<std::path::PathBuf>()?;
   let extension = path.extension();
 
   let extension = FileType::from(
@@ -20,14 +26,13 @@ async fn serve_frontend(
       .ok_or_else(|| bad_request(()))?,
   );
 
-  let path: std::path::PathBuf =
-    format!("./web_root/{}", path.file_name().unwrap().to_string_lossy())
-      .parse()
-      .unwrap();
+  let path: std::path::PathBuf = format!("./web_root/{}", path.to_string_lossy()).parse()?;
   log::debug!("Serving static file: {}", path.to_string_lossy());
 
   Ok(
-    actix_files::NamedFile::open(path)?
+    actix_files::NamedFile::open_async(&path)
+      .await
+      .map_err(not_found)?
       .set_content_type(extension.into())
       .use_last_modified(true),
   )

@@ -51,7 +51,7 @@ pub(crate) async fn register_v1(
   // there isn't really a point in not logging the user in here
   login_user(&request.extensions(), id)?;
 
-  id.into()
+  Response::from(&value.user)
 }
 
 /// calling this with correct login data will set a cookie to enable access to protected resources
@@ -65,8 +65,10 @@ pub(crate) async fn login_v1(
 
   // remember user id for session
   login_user(&request.extensions(), id)?;
+  let user: User =
+    unsafe { <sled::Tree as RawRkyvStore<_, 256>>::get_unchecked(&state.user_db, id)? };
 
-  id.into()
+  Response::from(&user)
 }
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
@@ -135,5 +137,5 @@ pub fn login_user(
 ) -> std::result::Result<(), ResponseError> {
   Identity::login(exts, id.to_string()).map_err(|_| ResponseError::ErrorInternalServerError)?;
 
-  Result::<(), ResponseError>::Ok(())
+  Ok(())
 }

@@ -4,31 +4,31 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-  {
-    "type": "lldb",
-    "request": "launch",
-    "name": "Cargo launch",
-    "cargo": {
-      "args": [
-        "build",
-        "--lib"
-      ]
-    },
-    "program": "${cargo:program}",
-    "args": []
-  },
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'web_frontend'",
+      "name": "Cargo launch",
       "cargo": {
         "args": [
           "build",
-          "--bin=web_frontend",
-          "--package=web_frontend"
+          "--lib"
+        ]
+      },
+      "program": "${cargo:program}",
+      "args": []
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'new_frontend'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=new_frontend",
+          "--package=new_frontend"
         ],
         "filter": {
-          "name": "web_frontend",
+          "name": "new_frontend",
           "kind": "bin"
         }
       },
@@ -38,16 +38,16 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'web_frontend'",
+      "name": "Debug unit tests in executable 'new_frontend'",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "--bin=web_frontend",
-          "--package=web_frontend"
+          "--bin=new_frontend",
+          "--package=new_frontend"
         ],
         "filter": {
-          "name": "web_frontend",
+          "name": "new_frontend",
           "kind": "bin"
         }
       },
@@ -77,11 +77,15 @@
       "type": "lldb",
       "request": "launch",
       "name": "Debug executable 'backend'",
+      "env": {
+        "RUST_LOG": "debug"
+      },
       "cargo": {
         "args": [
           "build",
           "--bin=backend",
-          "--package=backend"
+          "--package=backend",
+          "--features=serve_frontend"
         ],
         "filter": {
           "name": "backend",

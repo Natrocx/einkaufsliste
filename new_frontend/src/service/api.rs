@@ -1,14 +1,34 @@
+use std::array::TryFromSliceError;
 use std::cell::Cell;
 use std::ops::Deref;
+use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use async_std::sync::Mutex;
 use einkaufsliste::model::list::List;
-use einkaufsliste::model::requests::LoginUserV1;
-
-use rkyv::de::deserializers::{SharedDeserializeMap};
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
+use einkaufsliste::model::user::User;
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest_cookie_store::{CookieStoreMutex, CookieStoreRwLock};
+use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
+use rkyv::CheckBytes;
+use tracing::debug;
+use tracing_subscriber::field::debug;
 
-use rkyv::{CheckBytes};
+/*
+ This file contains the API client and a reference counted Service for use in dioxus.
+
+ It should not be used directly but rather through a cached service.
+
+ Maintainers notes:
+   * remeber to call `.error_for_status()` on all responses to catch invalid requests and server errors
+*/
+
+// Avoid certificate errors on desktop
+#[cfg(not(target_arch = "wasm32"))]
+pub static DEVELOPMENT_CERTIFICATE: &[u8] = include_bytes!("./rootCA.pem");
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -31,6 +51,7 @@ impl Deref for ApiService {
   }
 }
 
+#[derive(Debug)]
 pub struct ApiClient {
   // encoding that was negotiated to be used for the current session
   negotiated_encoding: Cell<Encoding>,
@@ -44,14 +65,50 @@ impl ApiClient {
     reqwest::Client::builder().build().map_err(Into::into)
   }
 
+  #[cfg(feature = "dev-certificate")]
   #[cfg(not(target_arch = "wasm32"))]
   fn build_client() -> Result<reqwest::Client, APIError> {
+    //let cookie_store = Self::setup_cookiestore()?;
+    let cert = reqwest::Certificate::from_pem(DEVELOPMENT_CERTIFICATE)?;
     reqwest::Client::builder()
-      .cookie_store(true)
+      .add_root_certificate(cert)
       .http2_prior_knowledge()
-      .redirect(reqwest::redirect::Policy::none())
+      .cookie_store(true)
+      //.cookie_provider(cookie_store)
+      .https_only(true)
       .build()
       .map_err(Into::into)
+  }
+
+  #[cfg(not(feature = "dev-certificate"))]
+  #[cfg(not(target_arch = "wasm32"))]
+  fn build_client() -> Result<reqwest::Client, APIError> {
+    let cookie_store = Self::setup_cookiestore()?;
+    reqwest::Client::builder()
+      .cookie_store(true)
+      .cookie_provider(cookie_store)
+      .http2_prior_knowledge()
+      .https_only(true)
+      .build()
+      .map_err(Into::into)
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  fn setup_cookiestore() -> Result<Arc<CookieStoreMutex>, APIError> {
+    let app_dirs = platform_dirs::AppDirs::new(Some("einkaufsliste"), false).unwrap();
+    let cookie_store_path = app_dirs.state_dir.join(Path::new("./cookies.json"));
+    let cookie_store = {
+      if let Ok(file) = std::fs::File::open(cookie_store_path).map(std::io::BufReader::new) {
+        // use re-exported version of `CookieStore` for crate compatibility
+        reqwest_cookie_store::CookieStore::load_json(file).unwrap()
+      } else {
+        reqwest_cookie_store::CookieStore::new(None)
+      }
+    };
+    let cookie_store = reqwest_cookie_store::CookieStoreMutex::new(cookie_store);
+    let cookie_store = std::sync::Arc::new(cookie_store);
+
+    Ok(cookie_store)
   }
 
   pub fn new(base_url: String) -> Result<Self, APIError> {
@@ -64,7 +121,8 @@ impl ApiClient {
     })
   }
 
-  pub async fn login(&self, credentials: LoginUserV1) -> Result<u64, APIError> {
+  #[tracing::instrument]
+  pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
     let response = self
       .client
       .post(format!("{}/login/v1", self.base_url))
@@ -72,24 +130,59 @@ impl ApiClient {
       .send()
       .await?;
 
-    let body = u64::from_be_bytes(
+    debug!("Login response: {response:?}");
+
+    let body_bytes = response.error_for_status()?.bytes().await?;
+
+    let user = self.decode(&*body_bytes)?;
+
+    Ok(user)
+  }
+
+  #[tracing::instrument]
+  pub async fn register(&self, credentials: RegisterUserV1) -> Result<User, APIError> {
+    let response = self
+      .client
+      .post(format!("{}/register/v1", self.base_url))
+      .body(self.encode(&credentials)?)
+      .send()
+      .await?;
+
+    let body_bytes = response.error_for_status()?.bytes().await?;
+
+    let user = self.decode(&*body_bytes)?;
+
+    Ok(user)
+  }
+
+  #[tracing::instrument]
+  pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
+    let response = self.client.get(format!("{}/user/lists", self.base_url)).send().await?;
+
+    let body = response.error_for_status()?.bytes().await?;
+
+    let lists = self.decode(&*body)?;
+
+    Ok(lists)
+  }
+
+  pub async fn create_list(&self, list: &List) -> Result<u64, APIError> {
+    let response = self
+      .client
+      .post(format!("{}/itemList", self.base_url))
+      .body(self.encode(list)?)
+      .send()
+      .await?;
+
+    Ok(u64::from_be_bytes(
       response
+        .error_for_status()?
         .bytes()
         .await?
         .as_ref()
-        .try_into() // convert to array for u64::from_be_bytes
-        .map_err(|e| APIError::Unknown(format!("Expected response from server not found. Got {e:?} instead.")))?, /* if conversion fails, then server must have returned garbage */
-    );
-
-    Ok(body)
-  }
-
-  pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
-    let response = self.client.get("/user/lists").send().await?;
-
-    let body = self.decode(response.bytes().await?.as_ref())?;
-
-    Ok(body)
+        .try_into()
+        .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
+    ))
   }
 
   pub fn get_img_url(&self, image_id: u64) -> String {
@@ -134,24 +227,24 @@ pub enum Encoding {
 
 #[derive(Debug)]
 pub enum APIError {
-  Network,
+  Network(reqwest::Error),
   InternalServer,
   Unauthorized,
   Unauthenticated,
-  Encoding,
-  Decoding,
+  Encoding(Box<dyn std::error::Error>),
+  Decoding(Box<dyn std::error::Error>),
   Unknown(String),
 }
 
 impl std::fmt::Display for APIError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      APIError::Network => write!(f, "Network error"),
-      APIError::InternalServer => write!(f, "Internal server error"),
-      APIError::Unauthorized => write!(f, "Unauthorized"),
-      APIError::Unauthenticated => write!(f, "Unauthenticated"),
-      APIError::Encoding => write!(f, "Encoding error"),
-      APIError::Decoding => write!(f, "Decoding error"),
+      APIError::Network(e) => write!(f, "A network error occurred: {e}"),
+      APIError::InternalServer => write!(f, "An internal server error occured."),
+      APIError::Unauthorized => write!(f, "You are not authorized to access the requested resource."),
+      APIError::Unauthenticated => write!(f, "You must authenticate yourself to access the requested resource."),
+      APIError::Encoding(e) => write!(f, "An unexpected error occurred while encoding the request: {e}"),
+      APIError::Decoding(e) => write!(f, "An unexpected error occurred while decoding the response: {e}"),
       APIError::Unknown(e) => write!(f, "Unknown error: {}", e),
     }
   }
@@ -160,8 +253,8 @@ impl std::fmt::Display for APIError {
 impl From<serde_json::Error> for APIError {
   fn from(e: serde_json::Error) -> Self {
     match e.is_io() {
-      true => APIError::Encoding,
-      false => APIError::Decoding,
+      true => APIError::Encoding(e.into()),
+      false => APIError::Decoding(e.into()),
     }
   }
 }
@@ -170,24 +263,28 @@ impl From<reqwest::Error> for APIError {
   fn from(e: reqwest::Error) -> Self {
     match e.status() {
       Some(status) => match status.as_u16() {
-        401 => APIError::Unauthorized,
-        403 => APIError::Unauthenticated,
+        401 => APIError::Unauthenticated,
+        403 => APIError::Unauthorized,
         500 => APIError::InternalServer,
         _ => APIError::Unknown(format!("Unexpected status code: {} with message {e}", status,)),
       },
-      None => APIError::Network,
+      None => APIError::Network(e),
     }
   }
 }
 
-impl<S, T, H> From<rkyv::ser::serializers::CompositeSerializerError<S, T, H>> for APIError {
-  fn from(_value: rkyv::ser::serializers::CompositeSerializerError<S, T, H>) -> Self {
-    Self::Encoding
+impl<S: std::error::Error, T: std::error::Error, H: std::error::Error>
+  From<rkyv::ser::serializers::CompositeSerializerError<S, T, H>> for APIError
+{
+  fn from(e: rkyv::ser::serializers::CompositeSerializerError<S, T, H>) -> Self {
+    // i dont want to deal with lifetimes here so no stacktrace - deal with it :))))
+    // can't stacktrace further than this anyway
+    Self::Encoding(e.to_string().into())
   }
 }
 
 impl<C: std::error::Error, D: std::error::Error> From<CheckDeserializeError<C, D>> for APIError {
-  fn from(_: CheckDeserializeError<C, D>) -> Self {
-    Self::Decoding
+  fn from(e: CheckDeserializeError<C, D>) -> Self {
+    Self::Decoding(e.to_string().into())
   }
 }
