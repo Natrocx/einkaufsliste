@@ -1,9 +1,9 @@
-use std::convert::{Infallible, TryInto};
+use std::convert::{Infallible};
 use std::fmt::Display;
-use std::ops::{Deref, FromResidual, Try};
+use std::ops::{FromResidual, Try};
 
 use actix_session::storage::LoadError;
-use actix_web::body::{self, BodySize, BoxBody, MessageBody};
+use actix_web::body::{BoxBody};
 use actix_web::error::{
   ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized,
   PayloadError,
@@ -11,21 +11,21 @@ use actix_web::error::{
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpResponse, Responder};
 use bytecheck::StructCheckError;
-use bytes::{BufMut, Bytes, BytesMut};
+
 use einkaufsliste::{ApiObject, Encoding};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
-  AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer,
-  CompositeSerializerError, FallbackScratch, HeapScratch, SharedSerializeMap,
+  AllocScratchError,
+  CompositeSerializerError,
   SharedSerializeMapError,
 };
 use rkyv::validation::validators::{
   CheckDeserializeError, DefaultValidator, DefaultValidatorError,
 };
 use rkyv::validation::CheckArchiveError;
-use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
-use sled::IVec;
-use zerocopy::AsBytes;
+use rkyv::{Deserialize};
+
+
 
 use crate::api::user::PasswordValidationError;
 
@@ -50,31 +50,6 @@ where
   }
 }
 
-// // blanket implementation for ResponseErrors
-// impl<T: ApiObject<'static>, B, E> FromResidual<std::result::Result<B, E>> for Response<T>
-// where
-//   B: Into<T>,
-//   E: Into<ResponseError>,
-//   T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
-//     + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
-// {
-//   fn from_residual(residual: std::result::Result<B, E>) -> Self {
-//     match residual {
-//       Ok(body) => Self(Ok(body.into())),
-//       Err(error) => Self(Err(error.into())),
-//     }
-//   }
-// }
-
-impl<E: Into<ResponseError>> From<Result<std::convert::Infallible, E>> for ResponseError {
-  fn from(value: Result<std::convert::Infallible, E>) -> Self {
-    match value {
-      Ok(_) => unreachable!(),
-      Err(e) => e.into(),
-    }
-    }
-}
-
 impl<T: ApiObject<'static>> From<T> for Response<T>
 where
   <T as rkyv::Archive>::Archived:
@@ -95,7 +70,7 @@ where
 {
   fn from_residual(residual: Result<Infallible, E>) -> Self {
     match residual{
-      Ok(body) => unreachable!(),
+      Ok(_) => unreachable!(),
       Err(error) => Self(Err(error.into())),
     }
   }
@@ -158,7 +133,7 @@ where
           }
         };
 
-        let body = BoxBody::new::<Vec<u8>>(body.into());
+        let body = BoxBody::new::<Vec<u8>>(body);
         HttpResponse::Ok().content_type(encoding).body(body)
       }
       Err(e) => {

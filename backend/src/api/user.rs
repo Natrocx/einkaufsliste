@@ -7,7 +7,7 @@ use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
-use zerocopy::AsBytes;
+
 
 use crate::db::{self, RawRkyvStore};
 use crate::response::*;

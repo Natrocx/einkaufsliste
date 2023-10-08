@@ -4,7 +4,7 @@ use super::item::Item;
 use super::shop::Shop;
 use super::{HasTypeDenominator, Identifiable};
 #[cfg(feature = "backend")]
-use crate::impl_from_request;
+use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
@@ -17,7 +17,7 @@ pub struct List {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(List);
+impl_api_traits!(List);
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -32,7 +32,7 @@ pub struct FlatItemsList {
 impl Eq for FlatItemsList {}
 
 #[cfg(feature = "backend")]
-impl_from_request!(FlatItemsList);
+impl_api_traits!(FlatItemsList);
 
 impl FlatItemsList {
   pub fn from_list_and_items(list: List, vec: Vec<Item>) -> Self {

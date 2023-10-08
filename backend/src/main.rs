@@ -6,7 +6,6 @@
 mod api;
 pub mod db;
 pub mod response;
-pub mod tests;
 mod util;
 
 use std::time::Duration;

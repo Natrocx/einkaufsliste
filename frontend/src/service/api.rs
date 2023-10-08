@@ -20,7 +20,7 @@ use tracing::debug;
 /*
  This file contains the API client and a reference counted Service for use in dioxus.
 
- It should not be used directly but rather through a cached service.
+ It should not be used directly but rather through a cached service. (to be implemented)
 
  Maintainers notes:
    * remeber to call `.error_for_status()` on all responses to catch invalid requests and server errors

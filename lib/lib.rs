@@ -1,6 +1,5 @@
-use std::cell::RefCell;
 
-use model::list::List;
+
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::serializers::AllocSerializer;
 use rkyv::validation::validators::DefaultValidator;
@@ -84,43 +83,15 @@ impl ApiObject<'static> for i16 {}
 #[cfg(feature = "backend")]
 impl ApiObject<'static> for i8 {}
 
-thread_local! {
-  static RKYV_DESERIALIZER: RefCell<SharedDeserializeMap> = RefCell::new(SharedDeserializeMap::new());
-}
-
-// #[cfg(feature = "backend")]
-// pub fn decode<T>(encoding: Encoding, bytes: &[u8]) -> Result<T, ::actix_web::Error>
-// where
-//   T: ApiObject<'static> + Clone,
-//   <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>
-//     + rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
-// {
-//   use actix_web::error::ErrorBadRequest;
-//   use rkyv::de::deserializers;
-//   use rkyv::Deserialize;
-
-//   match encoding {
-//     Encoding::JSON => Ok(serde_json::from_slice(&bytes)?),
-//     Encoding::Rkyv => {
-//       let val = RKYV_DESERIALIZER.with_borrow_mut(|de| {
-//         let archived = rkyv::check_archived_root::<T>(bytes).map_err(|e| ErrorBadRequest(e.to_string()));
-
-//         archived.map(|archived| archived.deserialize(de).unwrap().clone())
-//       });
-//       val
-//     }
-//   }
-// }
-
 
 /**
-Implement the [`actix_web::FromRequest`] trait for any type serializable with `rkyv::from_bytes`. The entire payload has to be processed in one "transaction" (using this extractor will prevent you from using other extractors operating on the payload).
+Implement the [`actix_web::FromRequest`] and the [`ApiObject`] trait for any type serializable with both [`rkyv`] and [`serde`]. The entire payload has to be processed in one "transaction" (using this extractor will prevent you from using other extractors operating on the payload).
 
 A blanket generic implementation is typically not possible due to orphaning restrictions. Use this macro to manually create a monomorphised implementation.
 */
 #[macro_export]
 #[cfg(feature = "backend")]
-macro_rules! impl_from_request {
+macro_rules! impl_api_traits {
   ($param:ty) => {
     #[automatically_derived]
         impl $crate::ApiObject<'static> for $param {}
@@ -145,6 +116,7 @@ macro_rules! impl_from_request {
                 }
               };
 
+              // for some reason I did not manage to extract a function here although that would be helpful
               let val: $param = match payload_encoding {
                 $crate::Encoding::JSON => match serde_json::from_slice(&bytes) {
                   Ok(val) => val,

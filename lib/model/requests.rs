@@ -2,7 +2,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
 #[cfg(feature = "backend")]
-use crate::impl_from_request;
+use crate::impl_api_traits;
 
 /// Command-pattern based structs to be used as request parameters
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
@@ -13,7 +13,7 @@ pub struct StoreItemAttached {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(StoreItemAttached);
+impl_api_traits!(StoreItemAttached);
 
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -23,7 +23,7 @@ pub struct RegisterUserV1 {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(RegisterUserV1);
+impl_api_traits!(RegisterUserV1);
 
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -33,4 +33,4 @@ pub struct LoginUserV1 {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(LoginUserV1);
+impl_api_traits!(LoginUserV1);

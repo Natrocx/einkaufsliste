@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use super::shop::Shop;
 use super::Identifiable;
 #[cfg(feature = "backend")]
-use crate::impl_from_request;
+use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes, Debug))]
@@ -20,4 +20,4 @@ impl Identifiable for Article {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(Article);
+impl_api_traits!(Article);

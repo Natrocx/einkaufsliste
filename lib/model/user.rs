@@ -4,7 +4,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
 #[cfg(feature = "backend")]
-use crate::impl_from_request;
+use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -15,7 +15,7 @@ pub struct User {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(User);
+impl_api_traits!(User);
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -25,7 +25,7 @@ pub struct UserWithPassword {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(UserWithPassword);
+impl_api_traits!(UserWithPassword);
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -52,7 +52,7 @@ impl ObjectList {
 }
 
 #[cfg(feature = "backend")]
-impl_from_request!(ObjectList);
+impl_api_traits!(ObjectList);
 
 #[derive(Archive, Serialize, Deserialize, Debug, Default, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]

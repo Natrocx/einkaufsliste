@@ -3,7 +3,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 use super::article::Article;
 use super::Identifiable;
 #[cfg(feature = "backend")]
-use crate::impl_from_request;
+use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
@@ -17,7 +17,7 @@ pub struct Item {
   pub alternative_article_ids: Option<Vec<<Article as Identifiable>::Id>>,
 }
 #[cfg(feature = "backend")]
-impl_from_request!(Item);
+impl_api_traits!(Item);
 
 #[derive(PartialEq, Eq, Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]

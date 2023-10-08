@@ -4,7 +4,7 @@ use actix_identity::Identity;
 use actix_web::{get, post, put, web};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::user::User;
-use zerocopy::AsBytes;
+
 
 use crate::db::RawRkyvStore;
 use crate::response::Response;
