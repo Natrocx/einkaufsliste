@@ -18,13 +18,15 @@ pub async fn get_item_by_id(
   id: web::Path<u64>,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<Item> {
   let user_id = identity.parse()?;
 
   state.verify_access::<Item, User>(*id, user_id)?;
 
-  let db = &state.item_db;
-  db.get(id.to_ne_bytes()).into()
+  let item =
+    unsafe { <sled::Tree as RawRkyvStore<Item, 384>>::get_unchecked(&state.item_db, *id)? };
+
+  Response::from(item)
 }
 
 //TODO: remove?
@@ -33,7 +35,7 @@ pub async fn store_item_unattached(
   item: Item,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<()> {
   let _user_id = identity.parse()?;
 
   <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item.id, &item)?;
@@ -46,7 +48,7 @@ pub async fn store_item_attached(
   mut param: StoreItemAttached,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<u64> {
   let user_id = identity.parse()?;
   let item_id = state.db.generate_id()?;
 
@@ -94,7 +96,7 @@ pub async fn get_item_list_flat(
   list_id: web::Path<u64>,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<FlatItemsList> {
   let user_id = identity.parse()?;
 
   state.verify_access::<List, User>(*list_id, user_id)?;
@@ -127,7 +129,7 @@ pub async fn get_item_list_flat(
 
   let flat_items_list = FlatItemsList::from_list_and_items(list, vec);
 
-  rkyv::to_bytes::<_, 256>(&flat_items_list)?.into()
+  Response::from(flat_items_list)
 }
 
 #[post("/itemList")]
@@ -135,7 +137,7 @@ pub(crate) async fn store_item_list(
   mut param: List,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<u64> {
   let user_id = identity.parse()?;
 
   // while an id is provided with the archived data, we do not use this id, given that the client does not know the new id as this is DB-managed information

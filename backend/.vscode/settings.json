@@ -3,6 +3,6 @@
   "rust-analyzer.inlayHints.bindingModeHints.enable": true,
   "rust-analyzer.diagnostics.experimental.enable": true,
   "rust-analyzer.checkOnSave.command": "clippy",
-  "rust-analyzer.checkOnSave.features": "backend",
+  "rust-analyzer.checkOnSave.features": "all",
   //"rust-analyzer.cargo.target": "wasm32-unknown-unknown"
 }

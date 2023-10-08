@@ -5,17 +5,17 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
+use einkaufsliste::Encoding;
+use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 #[cfg(not(target_arch = "wasm32"))]
-use reqwest_cookie_store::{CookieStoreMutex};
+use reqwest_cookie_store::CookieStoreMutex;
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
 use rkyv::CheckBytes;
 use tracing::debug;
-
 
 /*
  This file contains the API client and a reference counted Service for use in dioxus.
@@ -72,7 +72,7 @@ impl ApiClient {
     let cert = reqwest::Certificate::from_pem(DEVELOPMENT_CERTIFICATE)?;
     reqwest::Client::builder()
       .add_root_certificate(cert)
-      .http2_prior_knowledge()
+      //.http2_prior_knowledge()
       .cookie_store(true)
       //.cookie_provider(cookie_store)
       .https_only(true)
@@ -111,6 +111,10 @@ impl ApiClient {
     Ok(cookie_store)
   }
 
+  pub fn set_encoding(&self, encoding: Encoding) {
+    self.negotiated_encoding.set(encoding);
+  }
+
   pub fn new(base_url: String) -> Result<Self, APIError> {
     let client = Self::build_client()?;
 
@@ -121,12 +125,35 @@ impl ApiClient {
     })
   }
 
+  fn get_request_headers(&self) -> reqwest::header::HeaderMap {
+    let mut headers = reqwest::header::HeaderMap::new();
+    match self.negotiated_encoding.get() {
+      Encoding::JSON => {
+        headers.insert(
+          CONTENT_TYPE,
+          HeaderValue::from_static("application/json"),
+        );
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+      }
+      Encoding::Rkyv => {
+        headers.insert(
+          CONTENT_TYPE,
+          HeaderValue::from_static("application/rkyv"),
+        );
+        headers.insert(ACCEPT, HeaderValue::from_static("application/rkyv"));
+      }
+    };
+
+    headers
+  }
+
   #[tracing::instrument]
   pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
     let response = self
-      .client
+      .client 
       .post(format!("{}/login/v1", self.base_url))
       .body(self.encode(&credentials)?)
+      .headers(self.get_request_headers())
       .send()
       .await?;
 
@@ -145,6 +172,7 @@ impl ApiClient {
       .client
       .post(format!("{}/register/v1", self.base_url))
       .body(self.encode(&credentials)?)
+      .headers(self.get_request_headers())
       .send()
       .await?;
 
@@ -157,7 +185,12 @@ impl ApiClient {
 
   #[tracing::instrument]
   pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
-    let response = self.client.get(format!("{}/user/lists", self.base_url)).send().await?;
+    let response = self
+      .client
+      .get(format!("{}/user/lists", self.base_url))
+      .headers(self.get_request_headers())
+      .send()
+      .await?;
 
     let body = response.error_for_status()?.bytes().await?;
 
@@ -170,6 +203,7 @@ impl ApiClient {
     let response = self
       .client
       .post(format!("{}/itemList", self.base_url))
+      .headers(self.get_request_headers())
       .body(self.encode(list)?)
       .send()
       .await?;
@@ -216,13 +250,6 @@ impl ApiClient {
       Encoding::Rkyv => Ok(rkyv::from_bytes(data)?),
     }
   }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub enum Encoding {
-  JSON,
-  #[default]
-  Rkyv,
 }
 
 #[derive(Debug)]

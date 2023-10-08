@@ -1,23 +1,27 @@
-use std::convert::TryInto;
+use std::convert::{Infallible, TryInto};
 use std::fmt::Display;
 use std::ops::{Deref, FromResidual, Try};
 
 use actix_session::storage::LoadError;
-use actix_web::body::{BodySize, MessageBody};
+use actix_web::body::{self, BodySize, BoxBody, MessageBody};
 use actix_web::error::{
   ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized,
   PayloadError,
 };
+use actix_web::http::header::ACCEPT;
 use actix_web::{HttpResponse, Responder};
 use bytecheck::StructCheckError;
 use bytes::{BufMut, Bytes, BytesMut};
+use einkaufsliste::{ApiObject, Encoding};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
   AlignedSerializer, AllocScratch, AllocScratchError, CompositeSerializer,
   CompositeSerializerError, FallbackScratch, HeapScratch, SharedSerializeMap,
   SharedSerializeMapError,
 };
-use rkyv::validation::validators::{CheckDeserializeError, DefaultValidatorError};
+use rkyv::validation::validators::{
+  CheckDeserializeError, DefaultValidator, DefaultValidatorError,
+};
 use rkyv::validation::CheckArchiveError;
 use rkyv::{AlignedVec, Archive, Deserialize, Serialize};
 use sled::IVec;
@@ -25,113 +29,152 @@ use zerocopy::AsBytes;
 
 use crate::api::user::PasswordValidationError;
 
-pub struct Response(pub Result<ResponseBody, ResponseError>);
+pub struct Response<T: ApiObject<'static>>(pub Result<T, ResponseError>)
+where
+  T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+    + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>;
 
-impl Response {
+impl Response<()> {
   pub fn empty() -> Self {
-    Self(Ok(ResponseBody::None))
+    Self(Ok(()))
   }
 }
 
-impl From<ResponseError> for Response {
+impl<T: ApiObject<'static>> From<ResponseError> for Response<T>
+where
+  T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+    + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+{
   fn from(e: ResponseError) -> Self {
     Self(Err(e))
   }
 }
 
-impl<Data> From<Data> for Response
-where
-  Data: TryInto<ResponseBody, Error: Into<ResponseError>>,
-{
-  fn from(data: Data) -> Self {
-    match data.try_into() {
-      Ok(val) => Self(Ok(val)),
-      Err(e) => Self(Err(e.into())),
+// // blanket implementation for ResponseErrors
+// impl<T: ApiObject<'static>, B, E> FromResidual<std::result::Result<B, E>> for Response<T>
+// where
+//   B: Into<T>,
+//   E: Into<ResponseError>,
+//   T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+//     + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+// {
+//   fn from_residual(residual: std::result::Result<B, E>) -> Self {
+//     match residual {
+//       Ok(body) => Self(Ok(body.into())),
+//       Err(error) => Self(Err(error.into())),
+//     }
+//   }
+// }
+
+impl<E: Into<ResponseError>> From<Result<std::convert::Infallible, E>> for ResponseError {
+  fn from(value: Result<std::convert::Infallible, E>) -> Self {
+    match value {
+      Ok(_) => unreachable!(),
+      Err(e) => e.into(),
     }
-  }
+    }
 }
 
-impl Deref for Response {
-  type Target = Result<ResponseBody, ResponseError>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl AsRef<Result<ResponseBody, ResponseError>> for Response {
-  fn as_ref(&self) -> &Result<ResponseBody, ResponseError> {
-    &self.0
-  }
-}
-
-// blanket implementation for ResponseErrors
-impl<B, E> FromResidual<std::result::Result<B, E>> for Response
+impl<T: ApiObject<'static>> From<T> for Response<T>
 where
-  B: Into<ResponseBody>,
-  E: Into<ResponseError>,
+  <T as rkyv::Archive>::Archived:
+    rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+  <T as rkyv::Archive>::Archived:
+    rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
 {
-  fn from_residual(residual: std::result::Result<B, E>) -> Self {
-    match residual {
-      Ok(body) => Self(Ok(body.into())),
+  fn from(val: T) -> Self {
+    Self(Ok(val))
+  }
+}
+
+impl<T: ApiObject<'static>, E: Into<ResponseError>> FromResidual<Result<Infallible, E>>
+  for Response<T>
+where
+  T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+    + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+{
+  fn from_residual(residual: Result<Infallible, E>) -> Self {
+    match residual{
+      Ok(body) => unreachable!(),
       Err(error) => Self(Err(error.into())),
     }
   }
 }
 
-impl Try for Response {
-  type Output = ResponseBody;
+impl<T: ApiObject<'static>> Try for Response<T>
+where
+  T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+    + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+{
+  type Output = T;
 
-  type Residual = Result<std::convert::Infallible, ResponseError>;
+  type Residual = Result<Infallible, ResponseError>;
 
   fn from_output(output: Self::Output) -> Self {
     Self(Ok(output))
   }
 
   fn branch(self) -> std::ops::ControlFlow<Self::Residual, Self::Output> {
-    match self {
-      Self(Ok(val)) => std::ops::ControlFlow::Continue(val),
-      Self(Err(e)) => std::ops::ControlFlow::Break(Err(e)),
-    }
-  }
-}
-
-impl Responder for Response {
-  type Body = ResponseBody;
-
-  fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
     match self.0 {
-      Ok(body) => HttpResponse::Ok().message_body(body).unwrap(),
-      Err(ResponseError::ErrorInternalServerError) => HttpResponse::InternalServerError()
-        .message_body(ResponseBody::None)
-        .unwrap(),
-      Err(ResponseError::ErrorBadRequest) => HttpResponse::BadRequest()
-        .message_body(ResponseBody::None)
-        .unwrap(),
-      Err(ResponseError::ErrorUnauthorized) => HttpResponse::Forbidden()
-        .message_body(ResponseBody::None)
-        .unwrap(),
-      Err(ResponseError::ErrorUnauthenticated) => HttpResponse::Unauthorized()
-        .message_body(ResponseBody::None)
-        .unwrap(),
-      Err(ResponseError::ErrorNotFound) => HttpResponse::NotFound()
-        .message_body(ResponseBody::None)
-        .unwrap(),
-      Err(ResponseError::Infallible) => unreachable!(),
+      Ok(val) => std::ops::ControlFlow::Continue(val),
+      Err(e) => std::ops::ControlFlow::Break(Err(e)),
     }
   }
 }
 
-/// The return type for all Database-Webserver related API functions
-pub enum ResponseBody {
-  Archive(Vec<u8>),
-  Numeric(u64),
-  None,
+fn encode<'a, T: ApiObject<'a>>(encoding: Encoding, body: &T) -> Result<Vec<u8>, ResponseError>
+where
+  <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
+    + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+{
+  match encoding {
+    Encoding::Rkyv => Ok(rkyv::to_bytes(body)?.to_vec()),
+    Encoding::JSON => serde_json::to_vec(body).map_err(|_| ResponseError::ErrorInternalServerError),
+  }
 }
 
-impl From<std::convert::Infallible> for ResponseBody {
-  fn from(_: std::convert::Infallible) -> Self {
-    Self::None
+impl<T: ApiObject<'static>> Responder for Response<T>
+where
+  T::Archived:
+    bytecheck::CheckBytes<DefaultValidator<'static>> + Deserialize<T, SharedDeserializeMap>,
+{
+  type Body = BoxBody;
+
+  fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
+    let encoding: einkaufsliste::Encoding = req
+      .headers()
+      .get(ACCEPT)
+      .map(Into::into)
+      .unwrap_or_default();
+    tracing::debug!("Responding with content type: {:?}", encoding);
+
+    match self.0 {
+      Ok(body) => {
+        let body = match encode(encoding, &body) {
+          Ok(body) => body,
+          Err(e) => {
+            let message = e.to_string();
+            return HttpResponse::InternalServerError().body(message);
+          }
+        };
+
+        let body = BoxBody::new::<Vec<u8>>(body.into());
+        HttpResponse::Ok().content_type(encoding).body(body)
+      }
+      Err(e) => {
+        let message = e.to_string();
+        let body = BoxBody::new::<String>(message);
+
+        match e {
+          ResponseError::ErrorBadRequest => HttpResponse::BadRequest().body(body),
+          ResponseError::ErrorInternalServerError => HttpResponse::InternalServerError().body(body),
+          ResponseError::ErrorNotFound => HttpResponse::NotFound().body(body),
+          ResponseError::ErrorUnauthorized => HttpResponse::Unauthorized().body(body),
+          ResponseError::ErrorUnauthenticated => HttpResponse::Unauthorized().body(body),
+          ResponseError::Infallible => unreachable!(),
+        }
+      }
+    }
   }
 }
 
@@ -221,18 +264,6 @@ impl From<Option<std::convert::Infallible>> for ResponseError {
   }
 }
 
-/// Implements the DB-to-result conversion for sleds return-values. Semantics depend on @vec being
-/// a value returned by `sled::Tree::get`
-impl From<sled::Result<Option<IVec>>> for Response {
-  fn from(vec: sled::Result<Option<IVec>>) -> Self {
-    match vec {
-      Ok(Some(val)) => Self(Ok(ResponseBody::from(val))),
-      Ok(None) => Self(Err(ResponseError::ErrorNotFound)),
-      Err(_e) => Self(Err(ResponseError::ErrorInternalServerError)),
-    }
-  }
-}
-
 impl
   From<
     CheckDeserializeError<
@@ -300,87 +331,5 @@ impl From<ResponseError> for LoadError {
       ResponseError::Infallible => LoadError::Other(e.into()),
       ResponseError::ErrorInternalServerError => LoadError::Deserialization(e.into()),
     }
-  }
-}
-
-impl MessageBody for ResponseBody {
-  type Error = ResponseError;
-
-  fn size(&self) -> actix_web::body::BodySize {
-    match &self {
-      ResponseBody::Archive(vec) => BodySize::Sized(vec.len() as u64),
-      ResponseBody::None => actix_web::body::BodySize::None,
-      ResponseBody::Numeric(_) => BodySize::Sized(std::mem::size_of::<u64>() as u64),
-    }
-  }
-
-  fn poll_next(
-    self: std::pin::Pin<&mut Self>,
-    _cx: &mut std::task::Context<'_>,
-  ) -> std::task::Poll<Option<Result<bytes::Bytes, Self::Error>>> {
-    let body = self.get_mut();
-    let val = std::task::Poll::Ready(match body {
-      ResponseBody::Archive(val) => Some({
-        // serve data in a single go and do not return anything else
-        let val = std::mem::take(val);
-
-        Ok(val.into())
-      }),
-      ResponseBody::None => None,
-      ResponseBody::Numeric(num) => Some(Ok({
-        let mut bytes = BytesMut::with_capacity(std::mem::size_of::<u64>());
-        bytes.put_u64(*num);
-        bytes.into()
-      })),
-    });
-    drop(std::mem::replace(body, ResponseBody::None));
-
-    val
-  }
-
-  fn try_into_bytes(self) -> Result<bytes::Bytes, Self>
-  where
-    Self: Sized,
-  {
-    match self {
-      ResponseBody::Archive(vec) => Ok(vec.into()),
-      ResponseBody::Numeric(num) => Ok(Bytes::from(num.to_be().as_bytes().to_owned())),
-      ResponseBody::None => Ok(Bytes::new()),
-    }
-  }
-}
-
-impl<Data> From<&Data> for ResponseBody
-where
-  Data: Archive
-    + Serialize<
-      CompositeSerializer<
-        AlignedSerializer<AlignedVec>,
-        FallbackScratch<HeapScratch<4096>, AllocScratch>,
-        SharedSerializeMap,
-      >,
-    >,
-  <Data as Archive>::Archived: Deserialize<Data, SharedDeserializeMap>,
-{
-  fn from(data: &Data) -> Self {
-    Self::Archive(rkyv::to_bytes(data).unwrap().to_vec())
-  }
-}
-
-impl From<IVec> for ResponseBody {
-  fn from(val: IVec) -> Self {
-    Self::Archive(val.to_vec())
-  }
-}
-
-impl From<u64> for ResponseBody {
-  fn from(num: u64) -> Self {
-    Self::Numeric(num)
-  }
-}
-
-impl From<AlignedVec> for ResponseBody {
-  fn from(vec: AlignedVec) -> Self {
-    Self::Archive(vec.into())
   }
 }

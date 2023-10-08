@@ -1,3 +1,5 @@
+use std::ops::Try;
+
 use actix_identity::Identity;
 use actix_web::{get, post, put, web};
 use einkaufsliste::model::article::Article;
@@ -14,11 +16,14 @@ pub(crate) async fn get_article_by_id(
   article_id: actix_web::web::Path<u64>,
   state: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<Article> {
   // check if the user has access:
   state.verify_access::<Article, User>(*article_id, identity.parse()?)?;
 
-  state.article_db.get(article_id.as_bytes()).into()
+  let article = unsafe {
+    <sled::Tree as RawRkyvStore<Article, 4096>>::get_unchecked(&state.article_db, *article_id)?
+  };
+  Response::from_output(article)
 }
 
 #[put("/article")]
@@ -26,7 +31,7 @@ async fn update_article(
   article: Article,
   data: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<()> {
   // before submitting parsed article to db we check the permissions:
   data.verify_access::<Article, User>(article.id, identity.parse()?)?;
 
@@ -45,7 +50,7 @@ pub(crate) async fn store_article(
   mut article: Article,
   data: web::Data<DbState>,
   identity: Identity,
-) -> Response {
+) -> Response<u64> {
   let user_id = identity.parse()?;
 
   // variable not inlineable because...??????? fuck you
@@ -61,5 +66,5 @@ pub(crate) async fn store_article(
   // since this is a new object we need to create an acl for this
   data.create_acl::<Article, User>(new_id, user_id)?;
 
-  Response::empty()
+  Response::from(new_id)
 }

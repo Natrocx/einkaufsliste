@@ -6,6 +6,7 @@
 mod api;
 pub mod db;
 pub mod response;
+pub mod tests;
 mod util;
 
 use std::time::Duration;
@@ -82,9 +83,7 @@ async fn main() -> std::io::Result<()> {
 
     app
       .wrap(cors)
-      .wrap(actix_web::middleware::Logger::new(
-        "%a %r %s %b %{set-cookie}o %{id}i %{User-Agent}i %T",
-      ))
+      .wrap(tracing_actix_web::TracingLogger::default())
       .wrap(identity_mw)
       .wrap(
         SessionMiddleware::builder(session_store.clone(), cookie_priv_key.clone())

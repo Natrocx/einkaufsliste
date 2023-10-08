@@ -14,6 +14,7 @@ use mime::Mime;
 async fn serve_frontend(
   filename: actix_web::web::Path<String>,
 ) -> Result<actix_files::NamedFile, crate::response::ResponseError> {
+  use super::errors::not_found;
   use crate::util::errors::bad_request;
 
   let path = filename.parse::<std::path::PathBuf>()?;

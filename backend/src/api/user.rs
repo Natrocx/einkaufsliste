@@ -7,7 +7,6 @@ use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
-
 use zerocopy::AsBytes;
 
 use crate::db::{self, RawRkyvStore};
@@ -21,8 +20,8 @@ pub(crate) async fn register_v1(
   parameter: RegisterUserV1,
   data: web::Data<DbState>,
   request: HttpRequest,
-) -> Response {
-  // validate registration request
+) -> Response<User> {
+  // validate registration request- kekw
   if parameter.password.len() < 8 {
     return bad_request("Password too short").into();
   }
@@ -51,7 +50,7 @@ pub(crate) async fn register_v1(
   // there isn't really a point in not logging the user in here
   login_user(&request.extensions(), id)?;
 
-  Response::from(&value.user)
+  Response::from(value.user)
 }
 
 /// calling this with correct login data will set a cookie to enable access to protected resources
@@ -60,15 +59,15 @@ pub(crate) async fn login_v1(
   login_request: LoginUserV1,
   state: web::Data<DbState>,
   request: HttpRequest,
-) -> Response {
+) -> Response<User> {
   let id = state.check_password(&login_request)?;
 
   // remember user id for session
   login_user(&request.extensions(), id)?;
-  let user: User =
+  let user: UserWithPassword =
     unsafe { <sled::Tree as RawRkyvStore<_, 256>>::get_unchecked(&state.user_db, id)? };
 
-  Response::from(&user)
+  Response::from(user.user)
 }
 
 #[allow(clippy::enum_variant_names)] // this is an error enum
@@ -100,18 +99,24 @@ pub(crate) async fn get_user_profile(
   state: web::Data<DbState>,
   id: web::Path<Option<u64>>,
   identity: Identity,
-) -> Response {
+) -> Response<User> {
   let requested_users_id = match *id {
     Some(id) => id,
     None => identity.parse()?,
   };
 
-  // Objects may be served directly from db
-  state.user_db.get(requested_users_id.as_bytes()).into()
+  let user: User = unsafe {
+    <sled::Tree as RawRkyvStore<_, 256>>::get_unchecked(&state.user_db, requested_users_id)?
+  };
+
+  Response::from(user)
 }
 
 #[get("/user/lists")]
-pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identity) -> Response {
+pub(crate) async fn get_users_lists(
+  state: web::Data<DbState>,
+  identity: Identity,
+) -> Response<Vec<List>> {
   let user_id = identity.parse()?;
 
   // read ObjectList from DB
@@ -128,7 +133,7 @@ pub(crate) async fn get_users_lists(state: web::Data<DbState>, identity: Identit
     })
     .collect::<Result<Vec<_>, ResponseError>>()?;
 
-  Response::from(&lists)
+  Response::from(lists)
 }
 
 pub fn login_user(

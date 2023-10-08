@@ -3,8 +3,10 @@ use std::ops::Deref;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
+#[cfg(feature = "backend")]
+use crate::impl_from_request;
 
-#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct User {
   pub id: <Self as Identifiable>::Id,
@@ -12,14 +14,20 @@ pub struct User {
   pub profile_picture_id: Option<u64>,
 }
 
-#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[cfg(feature = "backend")]
+impl_from_request!(User);
+
+#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct UserWithPassword {
   pub user: User,
   pub password: Password,
 }
 
-#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize)]
+#[cfg(feature = "backend")]
+impl_from_request!(UserWithPassword);
+
+#[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct Password {
   pub hash: Vec<u8>,
@@ -43,7 +51,10 @@ impl ObjectList {
   }
 }
 
-#[derive(Archive, Serialize, Deserialize, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[cfg(feature = "backend")]
+impl_from_request!(ObjectList);
+
+#[derive(Archive, Serialize, Deserialize, Debug, Default, serde::Serialize, serde::Deserialize, Clone)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct UsersObjectLists {
   pub lists: Vec<ObjectList>,
