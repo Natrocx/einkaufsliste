@@ -3,13 +3,12 @@ use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
 
-use super::error::ErrorService;
 use crate::service::api::{APIError, ApiService};
 
 pub fn authentication_form(cx: Scope) -> Element {
   let _api: AuthService = cx.consume_context()?;
   let api = _api.clone(); // Clone for the closure :(
-  let _error_handler: ErrorService = cx.consume_context()?;
+  let _error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
 
   let error_handler = _error_handler.clone();
   let navigator = use_navigator(cx);
@@ -34,8 +33,8 @@ pub fn authentication_form(cx: Scope) -> Element {
         }
 
         //Handle any errors from the fetch here
-        Err(_err) => {
-          error_handler.handle_error(_err.to_string()).await;
+        Err(err) => {
+          error_handler.send(err);
         }
       }
     });
@@ -59,8 +58,8 @@ pub fn authentication_form(cx: Scope) -> Element {
         }
 
         //Handle any errors from the fetch here
-        Err(_err) => {
-          error_handler.handle_error(_err.to_string()).await;
+        Err(err) => {
+          error_handler.send(err);
         }
       }
     });
@@ -89,6 +88,7 @@ pub fn authentication_form(cx: Scope) -> Element {
 })
 }
 
+// Service struct to handle authentication. It is not usually used manually as any unauthenticated request will cause a redirect to the login page
 #[derive(Clone)]
 pub struct AuthService {
   api: ApiService,

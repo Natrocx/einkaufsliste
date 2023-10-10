@@ -1,32 +1,25 @@
-
 use dioxus::prelude::*;
-use dioxus_router::prelude::{use_navigator};
+use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::list::List;
 
-
-
-use super::error::ErrorService;
-use crate::service::api::ApiService;
-
+use crate::service::api::{APIError, ApiService};
 
 pub fn homepage(cx: Scope) -> Element {
-  let error_handler = cx.consume_context::<ErrorService>().unwrap();
+  let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
   let _navigator = use_navigator(cx);
   let lists = use_state(cx, std::vec::Vec::new);
   let api = cx.consume_context::<ApiService>()?;
-
-  // enable using the api and error handler in multiple async blocks
+  // retain one copy of the api for the cx.render call at the bottom of the function
   let _api = api.clone();
-  let _error_handler = error_handler.clone();
 
   // fetch the lists from the API when the component is first rendered but do not refetch on local changes to avoid overwriting them
   use_future(cx, (), |()| {
-    to_owned![lists];
+    to_owned![api, lists, error_handler];
     async move {
       let fetched_lists = match api.fetch_all_lists().await {
         Ok(lists) => lists,
         Err(e) => {
-          error_handler.handle_api_error(e).await;
+          error_handler.send(e);
           return;
         }
       };
@@ -34,11 +27,8 @@ pub fn homepage(cx: Scope) -> Element {
     }
   });
 
-  let api = _api.clone();
   let on_new = move |_| {
-    to_owned![lists];
-    let error_handler = _error_handler.clone();
-    let api = api.clone();
+    to_owned![api, error_handler, lists];
     let mut list = List {
       name: "New List".to_string(),
       image_id: None,
@@ -54,7 +44,7 @@ pub fn homepage(cx: Scope) -> Element {
           lists.with_mut(|lists| lists.push(list));
         }
         Err(e) => {
-          error_handler.handle_api_error(e).await;
+          error_handler.send(e);
         }
       }
     })

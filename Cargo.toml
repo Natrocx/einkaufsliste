@@ -33,3 +33,6 @@ path = "lib/lib.rs"
 
 [profile.release]
 lto = "thin" # does not impact build performance significantly, when building all crates; do not use for development
+
+[profile.dev]
+opt-level = 3

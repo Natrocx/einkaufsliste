@@ -23,6 +23,7 @@ dioxus-router = "0.4.1"
 tracing-subscriber = { version = "0.3.17", features = ["fmt"] }
 url = "2.4.1"
 platform-dirs = "0.3.0"
+fermi = "0.4.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus-desktop = "0.4.0"

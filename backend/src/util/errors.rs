@@ -2,13 +2,13 @@ use sled::transaction::ConflictableTransactionError;
 
 use crate::response::ResponseError;
 
-pub fn error<T: std::fmt::Display>(e: T) -> ResponseError {
+pub fn error<T: std::error::Error + 'static>(e: T) -> ResponseError {
   log::error!("An unexcpected Error occurred! Failed to serve request. Reason: {e}");
 
-  ResponseError::ErrorInternalServerError
+  ResponseError::ErrorInternalServerError(e.into())
 }
 
-pub fn abort_error<T: std::fmt::Display>(e: T) -> ConflictableTransactionError<ResponseError> {
+pub fn abort_error<T: std::error::Error + 'static>(e: T) -> ConflictableTransactionError<ResponseError> {
   ConflictableTransactionError::Abort(error(e))
 }
 

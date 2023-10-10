@@ -70,7 +70,7 @@ pub(crate) async fn login_v1(
   Response::from(user.user)
 }
 
-#[allow(clippy::enum_variant_names)] // this is an error enum
+#[allow(clippy::enum_variant_names)]// this is an error enum
 #[derive(Debug)]
 pub enum PasswordValidationError {
   DbAccessError(sled::Error),
@@ -140,7 +140,7 @@ pub fn login_user(
   exts: &Extensions,
   id: <User as Identifiable>::Id,
 ) -> std::result::Result<(), ResponseError> {
-  Identity::login(exts, id.to_string()).map_err(|_| ResponseError::ErrorInternalServerError)?;
+  Identity::login(exts, id.to_string()).map_err(|e| ResponseError::ErrorInternalServerError(e.into()))?;
 
   Ok(())
 }

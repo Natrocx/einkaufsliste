@@ -21,6 +21,7 @@ use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
 use mimalloc::MiMalloc;
 use rand::Rng;
+use tracing_subscriber::filter::{LevelFilter, Targets};
 
 use crate::util::session_store::SledSessionStore;
 
@@ -30,10 +31,9 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-  env_logger::init();
+  setup_tracing();
 
   let db = sled::open("./data.sled")?;
-
   let session_store = SledSessionStore {
     session_db: db.open_tree("sessions")?,
   };
@@ -99,4 +99,21 @@ async fn main() -> std::io::Result<()> {
   .bind_rustls("127.0.0.1:8443", config.tls_config)?
   .run()
   .await
+}
+
+pub fn setup_tracing() {
+  use tracing_subscriber::prelude::*;
+
+  let filter_layer = Targets::new()
+    .with_target("h2", LevelFilter::OFF)
+    .with_target("actix_identity", LevelFilter::ERROR)
+    .with_target("sled", LevelFilter::WARN)
+    .with_default(LevelFilter::DEBUG);
+
+  let fmt_layer = tracing_subscriber::fmt::layer().pretty();
+
+  tracing_subscriber::registry()
+    .with(filter_layer)
+    .with(fmt_layer)
+    .init();
 }

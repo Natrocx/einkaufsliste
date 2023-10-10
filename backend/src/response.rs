@@ -1,34 +1,33 @@
-use std::convert::{Infallible};
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::ops::{FromResidual, Try};
 
 use actix_session::storage::LoadError;
-use actix_web::body::{BoxBody};
+use actix_web::body::BoxBody;
 use actix_web::error::{
   ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized,
   PayloadError,
 };
 use actix_web::http::header::ACCEPT;
 use actix_web::{HttpResponse, Responder};
+use anyhow::anyhow;
 use bytecheck::StructCheckError;
-
 use einkaufsliste::{ApiObject, Encoding};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{
-  AllocScratchError,
-  CompositeSerializerError,
-  SharedSerializeMapError,
+  AllocScratchError, CompositeSerializerError, SharedSerializeMapError,
 };
 use rkyv::validation::validators::{
   CheckDeserializeError, DefaultValidator, DefaultValidatorError,
 };
 use rkyv::validation::CheckArchiveError;
-use rkyv::{Deserialize};
-
-
+use rkyv::Deserialize;
 
 use crate::api::user::PasswordValidationError;
 
+/**
+ A Response type that can dynamically switch content type between rkyv and json depending on the requests Accept header.
+*/
 pub struct Response<T: ApiObject<'static>>(pub Result<T, ResponseError>)
 where
   T::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
@@ -104,7 +103,7 @@ where
 {
   match encoding {
     Encoding::Rkyv => Ok(rkyv::to_bytes(body)?.to_vec()),
-    Encoding::JSON => serde_json::to_vec(body).map_err(|_| ResponseError::ErrorInternalServerError),
+    Encoding::JSON => serde_json::to_vec(body).map_err(|e| ResponseError::ErrorInternalServerError(e.into())),
   }
 }
 
@@ -142,11 +141,10 @@ where
 
         match e {
           ResponseError::ErrorBadRequest => HttpResponse::BadRequest().body(body),
-          ResponseError::ErrorInternalServerError => HttpResponse::InternalServerError().body(body),
+          ResponseError::ErrorInternalServerError (e) => { HttpResponse::InternalServerError().body(body) },
           ResponseError::ErrorNotFound => HttpResponse::NotFound().body(body),
           ResponseError::ErrorUnauthorized => HttpResponse::Unauthorized().body(body),
           ResponseError::ErrorUnauthenticated => HttpResponse::Unauthorized().body(body),
-          ResponseError::Infallible => unreachable!(),
         }
       }
     }
@@ -159,8 +157,7 @@ pub enum ResponseError {
   ErrorUnauthenticated,
   ErrorUnauthorized,
   ErrorNotFound,
-  ErrorInternalServerError,
-  Infallible,
+  ErrorInternalServerError(Box<dyn std::error::Error>),
 }
 
 impl From<ResponseError> for actix_web::Error {
@@ -168,8 +165,7 @@ impl From<ResponseError> for actix_web::Error {
     match val {
       ResponseError::ErrorUnauthorized => ErrorForbidden(val.to_string()),
       ResponseError::ErrorNotFound => ErrorNotFound(val.to_string()),
-      ResponseError::ErrorInternalServerError => ErrorInternalServerError(val.to_string()),
-      ResponseError::Infallible => unreachable!(),
+      ResponseError::ErrorInternalServerError {..} => ErrorInternalServerError(val.to_string()),
       ResponseError::ErrorUnauthenticated => ErrorUnauthorized(val.to_string()),
       ResponseError::ErrorBadRequest => ErrorBadRequest(val.to_string()),
     }
@@ -177,14 +173,14 @@ impl From<ResponseError> for actix_web::Error {
 }
 
 impl From<sled::Error> for ResponseError {
-  fn from(_: sled::Error) -> Self {
-    Self::ErrorInternalServerError
+  fn from(e: sled::Error) -> Self {
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
 impl From<std::io::Error> for ResponseError {
-  fn from(_: std::io::Error) -> Self {
-    Self::ErrorInternalServerError
+  fn from(e: std::io::Error) -> Self {
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
@@ -194,8 +190,7 @@ impl Display for ResponseError {
       ResponseError::ErrorUnauthorized => {
         "You are not authorized to access the requested Ressource".into()
       }
-      ResponseError::ErrorInternalServerError => "An unknown internal Server error occurred".into(),
-      ResponseError::Infallible => unreachable!(),
+      ResponseError::ErrorInternalServerError {..} => "An unknown internal Server error occurred".into(),
       ResponseError::ErrorNotFound => "Requested resource can not be found.".into(),
       ResponseError::ErrorUnauthenticated => {
         "You are not authenticated. You must authenticate yourself to use this endpoint.".into()
@@ -214,26 +209,26 @@ impl
   > for ResponseError
 {
   fn from(
-    _: CompositeSerializerError<
+    e: CompositeSerializerError<
       std::convert::Infallible,
       AllocScratchError,
       SharedSerializeMapError,
     >,
   ) -> Self {
-    Self::ErrorInternalServerError
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
 impl From<actix_web::Error> for ResponseError {
-  fn from(_e: actix_web::Error) -> Self {
-    Self::ErrorInternalServerError
+  fn from(e: actix_web::Error) -> Self {
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
 impl From<Option<std::convert::Infallible>> for ResponseError {
   fn from(opt: Option<std::convert::Infallible>) -> Self {
     match opt {
-      Some(_) => Self::Infallible,
+      Some(_) => unreachable!(),
       None => Self::ErrorNotFound,
     }
   }
@@ -248,12 +243,12 @@ impl
   > for ResponseError
 {
   fn from(
-    _e: CheckDeserializeError<
+    e: CheckDeserializeError<
       CheckArchiveError<StructCheckError, DefaultValidatorError>,
       SharedDeserializeMapError,
     >,
   ) -> Self {
-    Self::ErrorInternalServerError
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
@@ -261,7 +256,7 @@ impl From<PasswordValidationError> for ResponseError {
   fn from(e: PasswordValidationError) -> Self {
     match e {
       PasswordValidationError::DbAccessError(_) | PasswordValidationError::RkyvValidationError => {
-        Self::ErrorInternalServerError
+        Self::ErrorInternalServerError(e.to_string().into())
       }
       PasswordValidationError::InvalidPassword | PasswordValidationError::NoSuchUserError => {
         Self::ErrorBadRequest
@@ -271,8 +266,8 @@ impl From<PasswordValidationError> for ResponseError {
 }
 
 impl From<rkyv::de::deserializers::SharedDeserializeMapError> for ResponseError {
-  fn from(_: rkyv::de::deserializers::SharedDeserializeMapError) -> Self {
-    Self::ErrorInternalServerError
+  fn from(e: rkyv::de::deserializers::SharedDeserializeMapError) -> Self {
+    Self::ErrorInternalServerError(e.into())
   }
 }
 
@@ -290,8 +285,8 @@ impl From<PayloadError> for ResponseError {
       PayloadError::Overflow => ResponseError::ErrorBadRequest,
       PayloadError::UnknownLength => ResponseError::ErrorBadRequest,
       PayloadError::Http2Payload(_) => ResponseError::ErrorBadRequest,
-      PayloadError::Io(_) => ResponseError::ErrorInternalServerError,
-      _ => ResponseError::ErrorInternalServerError,
+      PayloadError::Io(_) => ResponseError::ErrorInternalServerError(err.into()),
+      _ => ResponseError::ErrorInternalServerError(err.into())
     }
   }
 }
@@ -303,8 +298,7 @@ impl From<ResponseError> for LoadError {
       ResponseError::ErrorUnauthenticated |
       ResponseError::ErrorUnauthorized |
       ResponseError::ErrorNotFound |
-      ResponseError::Infallible => LoadError::Other(e.into()),
-      ResponseError::ErrorInternalServerError => LoadError::Deserialization(e.into()),
+      ResponseError::ErrorInternalServerError(_) => LoadError::Deserialization(anyhow!(e.to_string())),
     }
   }
 }

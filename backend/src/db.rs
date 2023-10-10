@@ -102,8 +102,7 @@ impl DbState {
   {
     let acl = self
       .acl_db
-      .get(object_id.as_bytes())
-      .map_err(|_| ResponseError::ErrorInternalServerError)?
+      .get(object_id.as_bytes())?
       .ok_or(ResponseError::ErrorNotFound)?;
 
     let acl =
