@@ -29,7 +29,7 @@ pub(crate) async fn register_v1(
     return bad_request("User already exists").into();
   }
 
-  let hashed_pw = DbState::hash_password(&parameter.password).await;
+  let hashed_pw = DbState::hash_password(&parameter.password)?;
   let id = data.db.generate_id().map_err(error)?;
 
   let value = UserWithPassword {
@@ -41,7 +41,7 @@ pub(crate) async fn register_v1(
     password: hashed_pw,
   };
 
-  <sled::Tree as RawRkyvStore<UserWithPassword, 128>>::store_unlisted(&data.user_db, id, &value)?;
+  <sled::Tree as RawRkyvStore<UserWithPassword, 256>>::store_unlisted(&data.user_db, id, &value)?;
   // TODO: move to RkyvStore/DbState? - currently blocked by Identifiable definition
   data
     .login_db

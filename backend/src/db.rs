@@ -1,3 +1,5 @@
+use actix_web::dev::Response;
+use argon2::Argon2;
 use einkaufsliste::model::requests::LoginUserV1;
 use einkaufsliste::model::user::{ObjectList, Password, User, UserWithPassword, UsersObjectLists};
 use einkaufsliste::model::{AccessControlList, HasTypeDenominator, Identifiable};
@@ -43,7 +45,7 @@ impl DbState {
 
     let request_pw_hash = Self::hash_password_with_salt(&login.password, &user.password.salt);
 
-    if Self::hash_password_with_salt(&login.password, &user.password.salt) == user.password.hash {
+    if Self::hash_password_with_salt(&login.password, &user.password.salt)? == user.password.hash {
       Ok(user.user.id)
     } else {
       debug!(
@@ -54,27 +56,31 @@ impl DbState {
     }
   }
 
-  pub(crate) fn hash_password_with_salt(password: &str, salt: &[u8]) -> Vec<u8> {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(password.as_bytes());
-    hasher.update(salt);
+  pub(crate) fn hash_password_with_salt(
+    password: &str,
+    salt: &[u8],
+  ) -> Result<Vec<u8>, PasswordValidationError> {
+    // Hash length does not matter much for password verification - 256 bit is definitely fine
+    let mut bytes = vec![0; 32];
 
-    hasher.finalize().as_bytes().to_vec()
+    Argon2::default()
+      .hash_password_into(password.as_bytes(), salt, &mut bytes)
+      .map_err(|_| PasswordValidationError::InvalidPassword)?;
+
+    Ok(bytes)
   }
 
-  pub(crate) async fn hash_password(password: &str) -> Password {
+  pub(crate) fn hash_password(password: &str) -> Result<Password, ResponseError> {
     // there is no need for the salt to be securely generated as even a normal random number prevents rainbow-table attacks
-    let mut salt = [0; 256];
+    let mut salt = [0; 32];
     thread_rng().fill(&mut salt);
 
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(password.as_bytes());
-    hasher.update(&salt);
+    let hash = Self::hash_password_with_salt(password, &salt)?;
 
-    Password {
-      hash: hasher.finalize().as_bytes().to_vec(),
+    Ok(Password {
+      hash,
       salt: salt.to_vec(),
-    }
+    })
   }
 
   pub(crate) fn verify_access<Object: Identifiable, User: Identifiable>(
