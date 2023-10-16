@@ -4,7 +4,8 @@ use async_std::stream::StreamExt;
 use dioxus::prelude::*;
 use dioxus_router::prelude::{use_navigator, Navigator, Outlet};
 
-use crate::{service::api::APIError, ui::Route};
+use crate::service::api::APIError;
+use crate::ui::Route;
 
 #[inline_props]
 pub fn error_handler(cx: Scope) -> Element {

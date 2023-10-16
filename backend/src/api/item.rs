@@ -1,4 +1,3 @@
-use actix_identity::Identity;
 use actix_web::{get, post, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
@@ -7,7 +6,6 @@ use einkaufsliste::model::user::User;
 use sled::transaction::{abort, TransactionalTree};
 use zerocopy::AsBytes;
 
-use crate::db::{ObjectStore, RawRkyvStore};
 use crate::response::{Response, ResponseError};
 use crate::util::errors::{error, not_found};
 use crate::util::identity_ext::AuthenticatedUser;
@@ -38,7 +36,7 @@ pub async fn store_item_attached(
   param.item.id = item_id;
 
   // insert item
-  state.store_unlisted(&param.item, item_id);
+  state.store_unlisted(&param.item, item_id)?;
 
   // direct usage of trees is unsafe as it can lead to storing the wrong type of object in a tree
   unsafe {

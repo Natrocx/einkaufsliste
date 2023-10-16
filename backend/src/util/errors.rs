@@ -1,6 +1,7 @@
 use sled::transaction::ConflictableTransactionError;
 
-use crate::{response::ResponseError, db::DbError};
+use crate::db::DbError;
+use crate::response::ResponseError;
 
 pub fn error<T: std::error::Error + 'static>(e: T) -> ResponseError {
   tracing::error!("An unexcpected Error occurred! Failed to serve request. Reason: {e}");

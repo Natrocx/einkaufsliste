@@ -66,26 +66,26 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   cx.render(rsx! {
-    h1 { "Login" }
-    label { "Username" }
-    input {
-        r#type: "text",
-        id: "username",
-        name: "username",
-        onchange: |evt| username.set(evt.value.clone())
-    }
-    br {}
-    label { "Password" }
-    input {
-        r#type: "password",
-        id: "password",
-        name: "password",
-        onchange: |evt| password.set(evt.value.clone())
-    }
-    br {}
-    button { onclick: onlogin, "Login" }
-    button { onclick: onregister, "Register" }
-})
+      h1 { "Login" }
+      label { "Username" }
+      input {
+          r#type: "text",
+          id: "username",
+          name: "username",
+          onchange: |evt| username.set(evt.value.clone())
+      }
+      br {}
+      label { "Password" }
+      input {
+          r#type: "password",
+          id: "password",
+          name: "password",
+          onchange: |evt| password.set(evt.value.clone())
+      }
+      br {}
+      button { onclick: onlogin, "Login" }
+      button { onclick: onregister, "Register" }
+  })
 }
 
 // Service struct to handle authentication. It is not usually used manually as any unauthenticated request will cause a redirect to the login page

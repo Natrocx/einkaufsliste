@@ -129,17 +129,11 @@ impl ApiClient {
     let mut headers = reqwest::header::HeaderMap::new();
     match self.negotiated_encoding.get() {
       Encoding::JSON => {
-        headers.insert(
-          CONTENT_TYPE,
-          HeaderValue::from_static("application/json"),
-        );
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
       }
       Encoding::Rkyv => {
-        headers.insert(
-          CONTENT_TYPE,
-          HeaderValue::from_static("application/rkyv"),
-        );
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/rkyv"));
         headers.insert(ACCEPT, HeaderValue::from_static("application/rkyv"));
       }
     };
@@ -150,7 +144,7 @@ impl ApiClient {
   #[tracing::instrument]
   pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
     let response = self
-      .client 
+      .client
       .post(format!("{}/login/v1", self.base_url))
       .body(self.encode(&credentials)?)
       .headers(self.get_request_headers())

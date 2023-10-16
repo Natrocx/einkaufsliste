@@ -1,10 +1,7 @@
 use std::future::{ready, Ready};
-use std::num::ParseIntError;
 
 use actix_identity::Identity;
 use actix_web::FromRequest;
-use futures::future::LocalBoxFuture;
-use mime::FromStrError;
 
 use crate::response::ResponseError;
 
@@ -26,9 +23,8 @@ impl FromRequest for AuthenticatedUser {
         if let Ok(user) = user_string.parse::<u64>() {
           return ready(Ok(AuthenticatedUser { id: user }));
         }
-        }
-
+      }
     }
-      ready(Err(ResponseError::ErrorUnauthenticated))
+    ready(Err(ResponseError::ErrorUnauthenticated))
   }
 }

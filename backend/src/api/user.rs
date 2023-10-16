@@ -8,11 +8,10 @@ use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
 
-use crate::db::{self, DbError, RawRkyvStore};
 use crate::response::*;
 use crate::util::errors::{bad_request, error};
 use crate::util::identity_ext::AuthenticatedUser;
-use crate::DbState;
+use crate::{db, DbState};
 
 #[post("/register/v1")]
 pub(crate) async fn register_v1(
@@ -40,7 +39,7 @@ pub(crate) async fn register_v1(
     password: hashed_pw,
   };
 
-  data.new_user(&value);
+  data.new_user(&value)?;
   data.store_unlisted(&value.user, id)?;
 
   // there isn't really a point in not logging the user in here
@@ -64,7 +63,7 @@ pub(crate) async fn login_v1(
   Response::from(user.user)
 }
 
-#[allow(clippy::enum_variant_names)]// this is an error enum
+#[allow(clippy::enum_variant_names)] // this is an error enum
 #[derive(Debug)]
 pub enum PasswordValidationError {
   DbAccessError(sled::Error),

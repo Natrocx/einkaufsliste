@@ -1,4 +1,3 @@
-use actix_identity::Identity;
 use actix_web::*;
 use einkaufsliste::model::shop::Shop;
 use einkaufsliste::model::user::User;

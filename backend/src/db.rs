@@ -11,12 +11,11 @@ use rand::{thread_rng, Rng};
 use rkyv::de::deserializers::{SharedDeserializeMap, SharedDeserializeMapError};
 use rkyv::ser::serializers::{AllocScratchError, CompositeSerializerError};
 use rkyv::Archive;
-use sled::transaction::{abort, TransactionError, TransactionalTree, UnabortableTransactionError};
+use sled::transaction::{TransactionError, TransactionalTree, UnabortableTransactionError};
 use tracing::debug;
 use zerocopy::AsBytes;
 
-use crate::api::user;
-use crate::util::errors::{abort_error, error};
+use crate::util::errors::abort_error;
 
 #[derive(Clone)]
 pub struct DbState {
@@ -208,7 +207,7 @@ impl DbState {
       rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
     Self: ObjectTree<T>,
   {
-    let tree = <Self as ObjectTree<T>>::get_tree(&self);
+    let tree = <Self as ObjectTree<T>>::get_tree(self);
 
     unsafe { <sled::Tree as RawRkyvStore<T, 4096>>::store_unlisted(tree, id, value) }?;
 

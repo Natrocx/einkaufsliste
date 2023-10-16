@@ -1,6 +1,5 @@
 use std::ops::Try;
 
-use actix_identity::Identity;
 use actix_web::{get, post, put, web};
 use einkaufsliste::model::article::Article;
 use einkaufsliste::model::user::User;

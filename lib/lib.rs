@@ -1,5 +1,5 @@
 use rkyv::de::deserializers::SharedDeserializeMap;
-use rkyv::ser::serializers::AllocSerializer;
+
 use rkyv::validation::validators::DefaultValidator;
 
 pub mod model;
