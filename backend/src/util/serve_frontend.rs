@@ -3,8 +3,6 @@ use std::str::FromStr;
 use actix_web::http::header::ContentType;
 use mime::Mime;
 
-
-
 /**
  * WARNING THIS IS INSECURE
  * only use for development
@@ -28,7 +26,7 @@ async fn serve_frontend(
   );
 
   let path: std::path::PathBuf = format!("./web_root/{}", path.to_string_lossy()).parse()?;
-  log::debug!("Serving static file: {}", path.to_string_lossy());
+  tracing::debug!("Serving static file: {}", path.to_string_lossy());
 
   Ok(
     actix_files::NamedFile::open_async(&path)

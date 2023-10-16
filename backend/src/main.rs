@@ -21,6 +21,8 @@ use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
 use mimalloc::MiMalloc;
 use rand::Rng;
+use tracing::subscriber::set_global_default;
+use tracing_log::LogTracer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 
 use crate::util::session_store::SledSessionStore;
@@ -104,6 +106,7 @@ async fn main() -> std::io::Result<()> {
 pub fn setup_tracing() {
   use tracing_subscriber::prelude::*;
 
+  LogTracer::init().expect("Failed to set logger");
   let filter_layer = Targets::new()
     .with_target("h2", LevelFilter::OFF)
     .with_target("actix_identity", LevelFilter::ERROR)
@@ -112,8 +115,9 @@ pub fn setup_tracing() {
 
   let fmt_layer = tracing_subscriber::fmt::layer().pretty();
 
-  tracing_subscriber::registry()
+  let subscriber = tracing_subscriber::registry()
     .with(filter_layer)
-    .with(fmt_layer)
-    .init();
+    .with(fmt_layer);
+
+  set_global_default(subscriber).unwrap();
 }

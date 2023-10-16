@@ -31,7 +31,7 @@ impl BackendConfig {
           .max_age(3600)
       })
       .unwrap_or_else(|| {
-        log::warn!(
+        tracing::warn!(
           "Could not find a frontend url in the backend configuration. Attempting to run in \
            restrictive Cors mode. This is likely to fail for non-development setups."
         );

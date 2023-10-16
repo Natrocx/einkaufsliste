@@ -10,7 +10,7 @@ pub mod session;
 pub mod shop;
 pub mod user;
 
-pub trait HasTypeDenominator {
+pub unsafe trait HasTypeDenominator {
   const DENOMINATOR: u64;
 }
 

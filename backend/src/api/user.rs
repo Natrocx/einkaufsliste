@@ -8,11 +8,10 @@ use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::{User, UserWithPassword};
 use einkaufsliste::model::Identifiable;
 
-
-use crate::db::{self, RawRkyvStore};
+use crate::db::{self, DbError, RawRkyvStore};
 use crate::response::*;
 use crate::util::errors::{bad_request, error};
-use crate::util::identity_ext::IdentityExt;
+use crate::util::identity_ext::AuthenticatedUser;
 use crate::DbState;
 
 #[post("/register/v1")]
@@ -41,11 +40,8 @@ pub(crate) async fn register_v1(
     password: hashed_pw,
   };
 
-  <sled::Tree as RawRkyvStore<UserWithPassword, 256>>::store_unlisted(&data.user_db, id, &value)?;
-  // TODO: move to RkyvStore/DbState? - currently blocked by Identifiable definition
-  data
-    .login_db
-    .insert(&parameter.name, &*rkyv::to_bytes::<_, 256>(&value)?)?;
+  data.new_user(&value);
+  data.store_unlisted(&value.user, id)?;
 
   // there isn't really a point in not logging the user in here
   login_user(&request.extensions(), id)?;
@@ -60,12 +56,10 @@ pub(crate) async fn login_v1(
   state: web::Data<DbState>,
   request: HttpRequest,
 ) -> Response<User> {
-  let id = state.check_password(&login_request)?;
+  let user = state.check_password(&login_request)?;
 
   // remember user id for session
-  login_user(&request.extensions(), id)?;
-  let user: UserWithPassword =
-    unsafe { <sled::Tree as RawRkyvStore<_, 256>>::get_unchecked(&state.user_db, id)? };
+  login_user(&request.extensions(), user.user.id)?;
 
   Response::from(user.user)
 }
@@ -98,16 +92,14 @@ impl Display for PasswordValidationError {
 pub(crate) async fn get_user_profile(
   state: web::Data<DbState>,
   id: web::Path<Option<u64>>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<User> {
   let requested_users_id = match *id {
     Some(id) => id,
-    None => identity.parse()?,
+    None => user.id,
   };
 
-  let user: User = unsafe {
-    <sled::Tree as RawRkyvStore<_, 256>>::get_unchecked(&state.user_db, requested_users_id)?
-  };
+  let user: User = state.get_unchecked(requested_users_id)?;
 
   Response::from(user)
 }
@@ -115,23 +107,17 @@ pub(crate) async fn get_user_profile(
 #[get("/user/lists")]
 pub(crate) async fn get_users_lists(
   state: web::Data<DbState>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<Vec<List>> {
-  let user_id = identity.parse()?;
-
   // read ObjectList from DB
   let list_ids =
-    <db::DbState as db::ObjectStore<List, sled::Tree, 512>>::object_list(&state, user_id)?;
+    <db::DbState as db::ObjectStore<List, sled::Tree, 512>>::object_list(&state, user.id)?;
 
   let lists = list_ids
     .list
     .into_iter()
-    .map(|id| {
-      let list =
-        unsafe { <sled::Tree as db::RawRkyvStore<List, 512>>::get_unchecked(&state.list_db, id)? };
-      Ok(list)
-    })
-    .collect::<Result<Vec<_>, ResponseError>>()?;
+    .map(|id| state.get_unchecked(id))
+    .collect::<Result<Vec<List>, _>>()?;
 
   Response::from(lists)
 }
@@ -140,7 +126,8 @@ pub fn login_user(
   exts: &Extensions,
   id: <User as Identifiable>::Id,
 ) -> std::result::Result<(), ResponseError> {
-  Identity::login(exts, id.to_string()).map_err(|e| ResponseError::ErrorInternalServerError(e.into()))?;
+  Identity::login(exts, id.to_string())
+    .map_err(|e| ResponseError::ErrorInternalServerError(e.into()))?;
 
   Ok(())
 }

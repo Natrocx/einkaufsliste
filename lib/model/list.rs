@@ -50,6 +50,6 @@ impl Identifiable for List {
   type Id = u64;
 }
 
-impl HasTypeDenominator for List {
+unsafe impl HasTypeDenominator for List {
   const DENOMINATOR: u64 = 0;
 }

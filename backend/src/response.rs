@@ -24,6 +24,7 @@ use rkyv::validation::CheckArchiveError;
 use rkyv::Deserialize;
 
 use crate::api::user::PasswordValidationError;
+use crate::db::DbError;
 
 /**
  A Response type that can dynamically switch content type between rkyv and json depending on the requests Accept header.
@@ -68,7 +69,7 @@ where
     + rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
 {
   fn from_residual(residual: Result<Infallible, E>) -> Self {
-    match residual{
+    match residual {
       Ok(_) => unreachable!(),
       Err(error) => Self(Err(error.into())),
     }
@@ -103,7 +104,9 @@ where
 {
   match encoding {
     Encoding::Rkyv => Ok(rkyv::to_bytes(body)?.to_vec()),
-    Encoding::JSON => serde_json::to_vec(body).map_err(|e| ResponseError::ErrorInternalServerError(e.into())),
+    Encoding::JSON => {
+      serde_json::to_vec(body).map_err(|e| ResponseError::ErrorInternalServerError(e.into()))
+    }
   }
 }
 
@@ -141,7 +144,10 @@ where
 
         match e {
           ResponseError::ErrorBadRequest => HttpResponse::BadRequest().body(body),
-          ResponseError::ErrorInternalServerError (e) => { HttpResponse::InternalServerError().body(body) },
+          ResponseError::ErrorInternalServerError(e) => {
+            tracing::error!(e);
+            HttpResponse::InternalServerError().body(body)
+          }
           ResponseError::ErrorNotFound => HttpResponse::NotFound().body(body),
           ResponseError::ErrorUnauthorized => HttpResponse::Unauthorized().body(body),
           ResponseError::ErrorUnauthenticated => HttpResponse::Unauthorized().body(body),
@@ -165,7 +171,7 @@ impl From<ResponseError> for actix_web::Error {
     match val {
       ResponseError::ErrorUnauthorized => ErrorForbidden(val.to_string()),
       ResponseError::ErrorNotFound => ErrorNotFound(val.to_string()),
-      ResponseError::ErrorInternalServerError {..} => ErrorInternalServerError(val.to_string()),
+      ResponseError::ErrorInternalServerError { .. } => ErrorInternalServerError(val.to_string()),
       ResponseError::ErrorUnauthenticated => ErrorUnauthorized(val.to_string()),
       ResponseError::ErrorBadRequest => ErrorBadRequest(val.to_string()),
     }
@@ -190,7 +196,9 @@ impl Display for ResponseError {
       ResponseError::ErrorUnauthorized => {
         "You are not authorized to access the requested Ressource".into()
       }
-      ResponseError::ErrorInternalServerError {..} => "An unknown internal Server error occurred".into(),
+      ResponseError::ErrorInternalServerError { .. } => {
+        "An unknown internal Server error occurred".into()
+      }
       ResponseError::ErrorNotFound => "Requested resource can not be found.".into(),
       ResponseError::ErrorUnauthenticated => {
         "You are not authenticated. You must authenticate yourself to use this endpoint.".into()
@@ -201,7 +209,14 @@ impl Display for ResponseError {
     write!(f, "{}", error)
   }
 }
-impl std::error::Error for ResponseError {}
+impl std::error::Error for ResponseError {
+  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    match self {
+      ResponseError::ErrorInternalServerError(e) => Some(e.as_ref()),
+      _ => None,
+    }
+  }
+}
 
 impl
   std::convert::From<
@@ -285,8 +300,7 @@ impl From<PayloadError> for ResponseError {
       PayloadError::Overflow => ResponseError::ErrorBadRequest,
       PayloadError::UnknownLength => ResponseError::ErrorBadRequest,
       PayloadError::Http2Payload(_) => ResponseError::ErrorBadRequest,
-      PayloadError::Io(_) => ResponseError::ErrorInternalServerError(err.into()),
-      _ => ResponseError::ErrorInternalServerError(err.into())
+      _ => ResponseError::ErrorInternalServerError(err.into()),
     }
   }
 }
@@ -298,7 +312,21 @@ impl From<ResponseError> for LoadError {
       ResponseError::ErrorUnauthenticated |
       ResponseError::ErrorUnauthorized |
       ResponseError::ErrorNotFound |
-      ResponseError::ErrorInternalServerError(_) => LoadError::Deserialization(anyhow!(e.to_string())),
+      ResponseError::ErrorInternalServerError(_) => {
+        LoadError::Deserialization(anyhow!(e.to_string()))
+      }
+    }
+  }
+}
+
+impl From<DbError> for ResponseError {
+  fn from(value: DbError) -> Self {
+    match value {
+      DbError::IO(_) | DbError::Encoding(_) => {
+        ResponseError::ErrorInternalServerError(value.into())
+      }
+      DbError::NotFound => ResponseError::ErrorNotFound,
+      DbError::Mismatch => ResponseError::ErrorBadRequest,
     }
   }
 }

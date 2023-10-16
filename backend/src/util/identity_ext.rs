@@ -1,23 +1,34 @@
+use std::future::{ready, Ready};
 use std::num::ParseIntError;
 
 use actix_identity::Identity;
+use actix_web::FromRequest;
+use futures::future::LocalBoxFuture;
 use mime::FromStrError;
 
 use crate::response::ResponseError;
 
-//TODO: make an extractor out of this
-pub trait IdentityExt {
-  fn parse(&self) -> std::result::Result<u64, ResponseError>;
+pub struct AuthenticatedUser {
+  pub id: u64,
 }
 
-impl IdentityExt for Identity {
-  fn parse(&self) -> std::result::Result<u64, ResponseError> {
-    self
-      .id()
-      // if this fails it is a bug in the identity middleware and not a client error
-      .map_err(|e|  ResponseError::ErrorInternalServerError(e.into()))?
-      .parse()
-      // if this fails, the semantics of the identity middleware have probably changed and it is not a client error
-      .map_err(|e: ParseIntError| ResponseError::ErrorInternalServerError(e.into()))
+impl FromRequest for AuthenticatedUser {
+  type Error = ResponseError;
+
+  type Future = Ready<Result<Self, Self::Error>>;
+
+  fn from_request(
+    req: &actix_web::HttpRequest,
+    payload: &mut actix_web::dev::Payload,
+  ) -> Self::Future {
+    if let Ok(identity) = Identity::from_request(req, payload).into_inner() {
+      if let Ok(user_string) = identity.id() {
+        if let Ok(user) = user_string.parse::<u64>() {
+          return ready(Ok(AuthenticatedUser { id: user }));
+        }
+        }
+
+    }
+      ready(Err(ResponseError::ErrorUnauthenticated))
   }
 }

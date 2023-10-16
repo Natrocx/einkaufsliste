@@ -1,22 +1,22 @@
 use sled::transaction::ConflictableTransactionError;
 
-use crate::response::ResponseError;
+use crate::{response::ResponseError, db::DbError};
 
 pub fn error<T: std::error::Error + 'static>(e: T) -> ResponseError {
-  log::error!("An unexcpected Error occurred! Failed to serve request. Reason: {e}");
+  tracing::error!("An unexcpected Error occurred! Failed to serve request. Reason: {e}");
 
   ResponseError::ErrorInternalServerError(e.into())
 }
 
-pub fn abort_error<T: std::error::Error + 'static>(e: T) -> ConflictableTransactionError<ResponseError> {
-  ConflictableTransactionError::Abort(error(e))
+pub fn abort_error<T: Into<DbError> + 'static>(e: T) -> ConflictableTransactionError<DbError> {
+  ConflictableTransactionError::Abort(e.into())
 }
 
 pub fn bad_request<T>(e: T) -> ResponseError
 where
   T: core::fmt::Debug,
 {
-  log::debug!("A user submitted a bad request. Rejecting: {:?}", e);
+  tracing::debug!("A user submitted a bad request. Rejecting: {:?}", e);
 
   ResponseError::ErrorBadRequest
 }

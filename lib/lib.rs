@@ -1,5 +1,3 @@
-
-
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::serializers::AllocSerializer;
 use rkyv::validation::validators::DefaultValidator;
@@ -9,7 +7,18 @@ pub mod model;
 pub mod util;
 
 pub trait ApiObject<'a>:
-  rkyv::Archive + rkyv::Serialize<AllocSerializer<4096>> + serde::Serialize + serde::Deserialize<'a>
+  rkyv::Archive
+  + rkyv::Serialize<
+    rkyv::ser::serializers::CompositeSerializer<
+      rkyv::ser::serializers::AlignedSerializer<rkyv::AlignedVec>,
+      rkyv::ser::serializers::FallbackScratch<
+        rkyv::ser::serializers::HeapScratch<4096>,
+        rkyv::ser::serializers::AllocScratch,
+      >,
+      rkyv::ser::serializers::SharedSerializeMap,
+    >,
+  > + serde::Serialize
+  + serde::Deserialize<'a>
 where
   Self::Archived: rkyv::Deserialize<Self, SharedDeserializeMap> + bytecheck::CheckBytes<DefaultValidator<'a>>,
 {

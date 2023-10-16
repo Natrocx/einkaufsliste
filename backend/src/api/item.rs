@@ -10,81 +10,66 @@ use zerocopy::AsBytes;
 use crate::db::{ObjectStore, RawRkyvStore};
 use crate::response::{Response, ResponseError};
 use crate::util::errors::{error, not_found};
-use crate::util::identity_ext::IdentityExt;
+use crate::util::identity_ext::AuthenticatedUser;
 use crate::{db, DbState};
 
 #[get("/item/{id}")]
 pub async fn get_item_by_id(
   id: web::Path<u64>,
   state: web::Data<DbState>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<Item> {
-  let user_id = identity.parse()?;
+  state.verify_access::<Item, User>(*id, user.id)?;
 
-  state.verify_access::<Item, User>(*id, user_id)?;
-
-  let item =
-    unsafe { <sled::Tree as RawRkyvStore<Item, 384>>::get_unchecked(&state.item_db, *id)? };
+  let item: Item = state.get_unchecked(*id)?;
 
   Response::from(item)
-}
-
-//TODO: remove?
-#[post("/item")]
-pub async fn store_item_unattached(
-  item: Item,
-  state: web::Data<DbState>,
-  identity: Identity,
-) -> Response<()> {
-  let _user_id = identity.parse()?;
-
-  <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item.id, &item)?;
-
-  Response::empty()
 }
 
 #[post("/item/attached")]
 pub async fn store_item_attached(
   mut param: StoreItemAttached,
   state: web::Data<DbState>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<u64> {
-  let user_id = identity.parse()?;
   let item_id = state.db.generate_id()?;
 
-  state.verify_access::<List, User>(param.list_id, user_id)?;
+  state.verify_access::<List, User>(param.list_id, user.id)?;
   param.item.id = item_id;
 
   // insert item
+  state.store_unlisted(&param.item, item_id);
 
-  <sled::Tree as RawRkyvStore<Item, 256>>::store_unlisted(&state.item_db, item_id, &param.item)?;
-
-  state
-    .list_db
-    .transaction(|tx_db| {
-      let mut current_list = match unsafe {
-        <&TransactionalTree as db::RawRkyvStore<List, 512>>::get_unchecked(&tx_db, param.list_id)
-      } {
-        Ok(val) => val,
-        Err(e) => return abort(not_found(e)),
-      };
-      current_list.items.push(param.item.id);
-      match <&TransactionalTree as db::RawRkyvStore<List, 512>>::store_unlisted(
-        &tx_db,
-        param.list_id,
-        &current_list,
-      ) {
-        Ok(_) => Ok(()),
-        Err(e) => abort(error(e)),
-      }
-    })
-    .map_err(|e| match e {
-      // return inner error if its a sled-user-error:
-      sled::transaction::TransactionError::Abort(e) => e,
-      // if not, something else went wrong, so generic server error:
-      _ => error(e),
-    })?;
-
+  // direct usage of trees is unsafe as it can lead to storing the wrong type of object in a tree
+  unsafe {
+    state
+      .list_db
+      .transaction(|tx_db| {
+        let mut current_list =
+          match <&TransactionalTree as db::RawRkyvStore<List, 512>>::get_unchecked(
+            &tx_db,
+            param.list_id,
+          ) {
+            Ok(val) => val,
+            Err(e) => return abort(not_found(e)),
+          };
+        current_list.items.push(param.item.id);
+        match <&TransactionalTree as db::RawRkyvStore<List, 512>>::store_unlisted(
+          &tx_db,
+          param.list_id,
+          &current_list,
+        ) {
+          Ok(_) => Ok(()),
+          Err(e) => abort(error(e)),
+        }
+      })
+      .map_err(|e| match e {
+        // return inner error if its a sled-user-error:
+        sled::transaction::TransactionError::Abort(e) => e,
+        // if not, something else went wrong, so generic server error:
+        _ => error(e),
+      })?;
+  }
   // ensure that we can get items independent of their corresponding list
   state.copy_acl::<List, Item>(param.list_id, param.item.id)?;
 
@@ -95,11 +80,9 @@ pub async fn store_item_attached(
 pub async fn get_item_list_flat(
   list_id: web::Path<u64>,
   state: web::Data<DbState>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<FlatItemsList> {
-  let user_id = identity.parse()?;
-
-  state.verify_access::<List, User>(*list_id, user_id)?;
+  state.verify_access::<List, User>(*list_id, user.id)?;
 
   let list_bytes = state
     .list_db
@@ -136,23 +119,14 @@ pub async fn get_item_list_flat(
 pub(crate) async fn store_item_list(
   mut param: List,
   state: web::Data<DbState>,
-  identity: Identity,
+  user: AuthenticatedUser,
 ) -> Response<u64> {
-  let user_id = identity.parse()?;
-
   // while an id is provided with the archived data, we do not use this id, given that the client does not know the new id as this is DB-managed information
   let id = state.db.generate_id()?;
-
   param.id = id;
-  <DbState as ObjectStore<List, sled::Tree, 256>>::store_listed(
-    &state,
-    user_id,
-    id,
-    &state.list_db,
-    &param,
-  )?;
 
-  state.create_acl::<List, User>(id, user_id)?;
+  state.store_listed(&param, user.id, id)?;
+  state.create_acl::<List, User>(id, user.id)?;
 
   // we need to return the newly generated id to the client
   id.into()
