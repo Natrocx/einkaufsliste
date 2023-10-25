@@ -2,8 +2,8 @@
 
 use tracing_subscriber::filter::LevelFilter;
 
-mod service;
-mod ui;
+pub mod service;
+pub mod ui;
 
 fn main() {
   #[cfg(not(target_arch = "wasm32"))]

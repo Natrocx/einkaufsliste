@@ -5,10 +5,12 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use einkaufsliste::model::list::List;
+use bytes::Bytes;
+use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
-use einkaufsliste::Encoding;
+use einkaufsliste::model::Identifiable;
+use einkaufsliste::{ApiObject, Encoding};
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest_cookie_store::CookieStoreMutex;
@@ -41,6 +43,19 @@ impl ApiService {
       inner: Rc::new(ApiClient::new(base_url)?),
     })
   }
+
+  pub(crate) async fn update_list(&self, list: &List) -> Result<(), APIError> {
+    let response = self
+      .client
+      .put(format!("{}/itemList", self.base_url))
+      .body(self.encode(list)?)
+      .send()
+      .await?;
+
+    response.error_for_status()?;
+
+    Ok(())
+}
 }
 
 impl Deref for ApiService {
@@ -141,6 +156,22 @@ impl ApiClient {
     headers
   }
 
+  async fn request<T: ApiObject<'static>>(&self, url: &str, method: reqwest::Method, body: T) -> Result<Bytes, APIError>
+  where
+    <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+    <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
+  {
+    let response = self
+      .client
+      .request(method, url)
+      .body(self.encode(&body)?)
+      .headers(self.get_request_headers())
+      .send()
+      .await?;
+
+    response.error_for_status()?.bytes().await.map_err(Into::into)
+  }
+
   #[tracing::instrument]
   pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
     let response = self
@@ -211,6 +242,21 @@ impl ApiClient {
         .try_into()
         .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
     ))
+  }
+
+  pub async fn fetch_list(&self, list_id: &<List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
+    let response = self
+      .client
+      .get(format!("{}/itemList/{}/flat", self.base_url, list_id))
+      .headers(self.get_request_headers())
+      .send()
+      .await?;
+
+    let body = response.error_for_status()?.bytes().await?;
+
+    let list = self.decode(&body)?;
+
+    Ok(list)
   }
 
   pub fn get_img_url(&self, image_id: u64) -> String {

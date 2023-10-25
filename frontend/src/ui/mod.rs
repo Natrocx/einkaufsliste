@@ -7,6 +7,8 @@ use crate::service::api::ApiService;
 pub mod auth;
 pub mod error;
 pub mod home;
+mod list;
+pub mod scaffold;
 
 pub fn app(cx: Scope) -> Element {
   let api_service = cx.provide_context(ApiService::new("https://localhost:8443".into()).unwrap());
@@ -29,8 +31,8 @@ fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let route = _route.join("/");
 
   cx.render(rsx! {
-      div { "The requested page at {route} could not be found. You are being redirected." }
-  })
+    div { "The requested page at {route} could not be found. You are being redirected." }
+})
 }
 
 #[derive(Routable, Clone)]
@@ -43,4 +45,6 @@ pub enum Route {
   Authentication,
   #[route("/:.._route", not_found)]
   PageNotFound { _route: Vec<String>},
+  #[route("/list/:id", list::list_view)]
+  List { id: u64 },
 }
