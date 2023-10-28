@@ -1,4 +1,4 @@
-use actix_web::{get, post, web};
+use actix_web::{get, post, put, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::StoreItemAttached;
@@ -128,4 +128,18 @@ pub(crate) async fn store_item_list(
 
   // we need to return the newly generated id to the client
   id.into()
+}
+
+// update only the metadata of a list, not the items
+#[put("/itemList")]
+pub async fn update_item_list(
+  param: List,
+  state: web::Data<DbState>,
+  user: AuthenticatedUser,
+) -> Response<()> {
+  state.verify_access::<List, User>(param.id, user.id)?;
+
+  state.store_listed(&param, user.id, param.id)?;
+
+  Response::from(())
 }

@@ -20,15 +20,15 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'new_frontend'",
+      "name": "Debug executable 'frontend'",
       "cargo": {
         "args": [
           "build",
-          "--bin=new_frontend",
-          "--package=new_frontend"
+          "--bin=frontend",
+          "--package=frontend"
         ],
         "filter": {
-          "name": "new_frontend",
+          "name": "frontend",
           "kind": "bin"
         }
       },

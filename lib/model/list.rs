@@ -1,9 +1,10 @@
+use std::ops::Deref;
+
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
 use super::shop::Shop;
 use super::{HasTypeDenominator, Identifiable};
-#[cfg(feature = "backend")]
 use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -16,7 +17,18 @@ pub struct List {
   pub items: Vec<<Item as Identifiable>::Id>,
 }
 
-#[cfg(feature = "backend")]
+impl From<&FlatItemsList> for List {
+  fn from(value: &FlatItemsList) -> Self {
+    Self {
+      id: value.id,
+      name: value.name.clone(),
+      shop: value.shop,
+      image_id: value.image_id,
+      items: value.items.iter().map(|item| item.id).collect(),
+    }
+  }
+}
+
 impl_api_traits!(List);
 
 #[derive(Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,7 +43,6 @@ pub struct FlatItemsList {
 
 impl Eq for FlatItemsList {}
 
-#[cfg(feature = "backend")]
 impl_api_traits!(FlatItemsList);
 
 impl FlatItemsList {

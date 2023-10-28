@@ -68,28 +68,19 @@ impl actix_web::http::header::TryIntoHeaderValue for Encoding {
   }
 }
 
-#[cfg(feature = "backend")]
 impl<T: ApiObject<'static>> ApiObject<'static> for Vec<T> where
   <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>
     + bytecheck::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
 {
 }
 
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for u64 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for u32 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for u16 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for u8 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for i64 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for i32 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for i16 {}
-#[cfg(feature = "backend")]
 impl ApiObject<'static> for i8 {}
 
 
@@ -99,12 +90,12 @@ Implement the [`actix_web::FromRequest`] and the [`ApiObject`] trait for any typ
 A blanket generic implementation is typically not possible due to orphaning restrictions. Use this macro to manually create a monomorphised implementation.
 */
 #[macro_export]
-#[cfg(feature = "backend")]
 macro_rules! impl_api_traits {
   ($param:ty) => {
     #[automatically_derived]
         impl $crate::ApiObject<'static> for $param {}
 
+        #[cfg(feature = "backend")]
         #[automatically_derived]
         impl actix_web::FromRequest for $param {
           type Error = ::actix_web::Error;

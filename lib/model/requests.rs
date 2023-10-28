@@ -1,7 +1,6 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
-#[cfg(feature = "backend")]
 use crate::impl_api_traits;
 
 /// Command-pattern based structs to be used as request parameters
@@ -22,7 +21,6 @@ pub struct RegisterUserV1 {
   pub password: String,
 }
 
-#[cfg(feature = "backend")]
 impl_api_traits!(RegisterUserV1);
 
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
@@ -32,5 +30,4 @@ pub struct LoginUserV1 {
   pub password: String,
 }
 
-#[cfg(feature = "backend")]
 impl_api_traits!(LoginUserV1);

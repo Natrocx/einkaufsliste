@@ -1,26 +1,14 @@
 # Dependencies
 The following applications are required in addition to rust to facilitate smooth development:
 
- * trunk
- * bower
-   >if you wish not to use bower, you may manually place a normalize.css deployment in frontend/bower_components/normalize.css
+ * dx - Dioxus cli utility
+  > install with `cargo install dioxus-cli`
+ * tailwind toolchain
+
 # Development
-In order to run the application for development, it is recommended to use the bundled runscript like so:
+To run the backend you may use the runscript in the backend folder. This will also make the backend serve the frontend under `https://localhost:8443/dev/index.html`.
 
-`cargo run -p runner -- [-o] [-r]`
-
-Run `cargo run -p runner -- --help` for more information. You may also locally symlink the generated runner-program, if the long command bothers you: 
-```
-cargo build -p runner --release
-ln -s target/release/runner ./run
-```
-And then repeatedly:
-```
-./run [-o] -[-r]
-```
-
-This runscript is required to mitigate issues regarding to CORS handling (as opposed to serving with trunk) and requires no external dependencies like webservers. The frontend will be served by the backend under the `/dev/` URI-prefix.
-The runscript is only support on *nix operating systems.
+Running the frontend natively is currently broken due to a bug with cookie handling in reqwest.
 
 # MSRV
 The minimum supported rust version is `nightly` due to reliance on the `Try` trait to make code more ergonomic. You may need rustc v1.65 or later.

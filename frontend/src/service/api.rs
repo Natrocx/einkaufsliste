@@ -3,7 +3,7 @@ use std::cell::Cell;
 use std::ops::Deref;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 use einkaufsliste::model::list::{FlatItemsList, List};
@@ -12,6 +12,7 @@ use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
+use reqwest::{Method, Response};
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest_cookie_store::CookieStoreMutex;
 use rkyv::de::deserializers::SharedDeserializeMap;
@@ -68,10 +69,17 @@ impl Deref for ApiService {
 
 #[derive(Debug)]
 pub struct ApiClient {
-  // encoding that was negotiated to be used for the current session
-  negotiated_encoding: Cell<Encoding>,
+  config: RwLock<ClientConfig>,
   base_url: String,
   client: reqwest::Client,
+}
+
+#[derive(Debug, Default)]
+pub struct ClientConfig {
+  pub encoding: Encoding,
+  // because reqwest is broken on native we need to keep track of identity ourselves, for now
+  #[cfg(not(target_arch = "wasm32"))]
+  cookie: Option<String>,
 }
 
 impl ApiClient {
@@ -127,7 +135,7 @@ impl ApiClient {
   }
 
   pub fn set_encoding(&self, encoding: Encoding) {
-    self.negotiated_encoding.set(encoding);
+    self.config.write().unwrap().encoding = encoding;
   }
 
   pub fn new(base_url: String) -> Result<Self, APIError> {
@@ -136,13 +144,14 @@ impl ApiClient {
     Ok(Self {
       client,
       base_url,
-      negotiated_encoding: Cell::new(Encoding::default()),
+      config: RwLock::new(ClientConfig::default())
     })
   }
 
   fn get_request_headers(&self) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    match self.negotiated_encoding.get() {
+    let mut lock = self.config.write().unwrap();
+    match lock.encoding {
       Encoding::JSON => {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
@@ -153,10 +162,60 @@ impl ApiClient {
       }
     };
 
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      tracing::debug!("Read cookie: {:?}", lock.cookie);
+      if let Some(cookie) = lock.cookie.take() {
+        headers.insert(reqwest::header::COOKIE, unsafe {
+          HeaderValue::from_maybe_shared_unchecked(cookie)
+        });
+      }
+    }
+
+    tracing::debug!("Sending headers: {headers:?}");
+
     headers
   }
 
-  async fn request<T: ApiObject<'static>>(&self, url: &str, method: reqwest::Method, body: T) -> Result<Bytes, APIError>
+  fn process_response_headers(&self, response: &Response) -> Result<(), APIError> {
+    // for now any cookies other than the id cookie are UB - requests may contain garbage cookies
+    let first_cookie = if cfg!(not(target_arch = "wasm32")) {
+      if let Some(cookie) = response.headers().get(reqwest::header::SET_COOKIE) {
+        let cookie_value = match cookie.to_str() {
+          Ok(value) => Some(value),
+          Err(e) => {
+            tracing::warn!("Failed to parse cookie: {e}");
+            None
+          }
+        };
+        // ';' is a reserved character so this should work for a well-formed cookie
+        let parsed_cookie = cookie_value
+          .and_then(|cookie| cookie.split_once(';'))
+          .map(|strings| strings.0.to_owned());
+
+        parsed_cookie
+      } else {
+        None
+      }
+    } else {
+      None
+    };
+
+    if let Some(cookie) = first_cookie {
+      let mut write_lock = self.config.write().unwrap();
+      tracing::debug!("Received Set-Cookie: {cookie}");
+      write_lock.cookie = Some(cookie);
+    }
+
+    Ok(())
+  }
+
+  async fn request<T: ApiObject<'static>>(
+    &self,
+    url: &str,
+    method: reqwest::Method,
+    body: &T,
+  ) -> Result<Bytes, APIError>
   where
     <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
     <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
@@ -164,44 +223,32 @@ impl ApiClient {
     let response = self
       .client
       .request(method, url)
-      .body(self.encode(&body)?)
+      .body(self.encode(body)?)
       .headers(self.get_request_headers())
       .send()
       .await?;
+
+    self.process_response_headers(&response)?;
 
     response.error_for_status()?.bytes().await.map_err(Into::into)
   }
 
   #[tracing::instrument]
   pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
-    let response = self
-      .client
-      .post(format!("{}/login/v1", self.base_url))
-      .body(self.encode(&credentials)?)
-      .headers(self.get_request_headers())
-      .send()
-      .await?;
+    let url = format!("{}/login/v1", self.base_url);
 
-    debug!("Login response: {response:?}");
+    let response_body_bytes = self.request(&url, Method::POST, &credentials).await?;
 
-    let body_bytes = response.error_for_status()?.bytes().await?;
-
-    let user = self.decode(&body_bytes)?;
+    let user = self.decode(&response_body_bytes)?;
 
     Ok(user)
   }
 
   #[tracing::instrument]
   pub async fn register(&self, credentials: RegisterUserV1) -> Result<User, APIError> {
-    let response = self
-      .client
-      .post(format!("{}/register/v1", self.base_url))
-      .body(self.encode(&credentials)?)
-      .headers(self.get_request_headers())
-      .send()
-      .await?;
+    let url = format!("{}/register/v1", self.base_url);
 
-    let body_bytes = response.error_for_status()?.bytes().await?;
+    let body_bytes = self.request(&url, Method::POST, &credentials).await?;
 
     let user = self.decode(&body_bytes)?;
 
@@ -210,34 +257,23 @@ impl ApiClient {
 
   #[tracing::instrument]
   pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
-    let response = self
-      .client
-      .get(format!("{}/user/lists", self.base_url))
-      .headers(self.get_request_headers())
-      .send()
-      .await?;
+    let url = format!("{}/user/lists", self.base_url);
 
-    let body = response.error_for_status()?.bytes().await?;
+    let body = self.request(&url, Method::GET, &()).await?;
 
     let lists = self.decode(&body)?;
 
     Ok(lists)
   }
 
+  #[tracing::instrument]
   pub async fn create_list(&self, list: &List) -> Result<u64, APIError> {
-    let response = self
-      .client
-      .post(format!("{}/itemList", self.base_url))
-      .headers(self.get_request_headers())
-      .body(self.encode(list)?)
-      .send()
-      .await?;
+    let url = format!("{}/itemList", self.base_url);
+
+    let body = self.request(&url, Method::POST, list).await?;
 
     Ok(u64::from_be_bytes(
-      response
-        .error_for_status()?
-        .bytes()
-        .await?
+      body
         .as_ref()
         .try_into()
         .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
@@ -245,14 +281,9 @@ impl ApiClient {
   }
 
   pub async fn fetch_list(&self, list_id: &<List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
-    let response = self
-      .client
-      .get(format!("{}/itemList/{}/flat", self.base_url, list_id))
-      .headers(self.get_request_headers())
-      .send()
-      .await?;
+    let url = format!("{}/itemList/{}/flat", self.base_url, list_id);
 
-    let body = response.error_for_status()?.bytes().await?;
+    let body = self.request(&url, Method::GET, &()).await?;
 
     let list = self.decode(&body)?;
 
@@ -272,7 +303,7 @@ impl ApiClient {
   where
     T: serde::Serialize + rkyv::Archive + rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<4096>>,
   {
-    let encoding = self.negotiated_encoding.get();
+    let encoding = self.config.read().unwrap().encoding;
     match encoding {
       Encoding::JSON => Ok(serde_json::to_vec(data)?),
       Encoding::Rkyv => Ok(rkyv::to_bytes(data)?.to_vec()),
@@ -284,7 +315,7 @@ impl ApiClient {
     T: serde::de::DeserializeOwned + rkyv::Archive,
     T::Archived: 'a + rkyv::Deserialize<T, SharedDeserializeMap> + CheckBytes<DefaultValidator<'a>>,
   {
-    let encoding = self.negotiated_encoding.get();
+    let encoding = self.config.read().unwrap().encoding;
     match encoding {
       Encoding::JSON => Ok(serde_json::from_slice(data)?),
       Encoding::Rkyv => Ok(rkyv::from_bytes(data)?),

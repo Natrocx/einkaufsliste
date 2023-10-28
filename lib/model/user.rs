@@ -3,7 +3,6 @@ use std::ops::Deref;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Identifiable;
-#[cfg(feature = "backend")]
 use crate::impl_api_traits;
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -14,7 +13,6 @@ pub struct User {
   pub profile_picture_id: Option<u64>,
 }
 
-#[cfg(feature = "backend")]
 impl_api_traits!(User);
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -24,7 +22,6 @@ pub struct UserWithPassword {
   pub password: Password,
 }
 
-#[cfg(feature = "backend")]
 impl_api_traits!(UserWithPassword);
 
 #[derive(Archive, Serialize, Deserialize, Debug, serde::Serialize, serde::Deserialize, Clone)]
@@ -51,7 +48,6 @@ impl ObjectList {
   }
 }
 
-#[cfg(feature = "backend")]
 impl_api_traits!(ObjectList);
 
 #[derive(Archive, Serialize, Deserialize, Debug, Default, serde::Serialize, serde::Deserialize, Clone)]
