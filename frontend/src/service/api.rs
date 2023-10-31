@@ -6,6 +6,8 @@ use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
+use dioxus::prelude::Scope;
+use dioxus_desktop::wry::http::request;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
@@ -38,25 +40,19 @@ pub struct ApiService {
   inner: Rc<ApiClient>,
 }
 
+pub fn use_provide_api_service(cx: &Scope, base_url: String) {
+  cx.use_hook(|| {
+    let api_service = ApiService::new(base_url).unwrap();
+    cx.provide_context(api_service)
+  });
+}
+
 impl ApiService {
   pub fn new(base_url: String) -> Result<Self, APIError> {
     Ok(Self {
       inner: Rc::new(ApiClient::new(base_url)?),
     })
   }
-
-  pub(crate) async fn update_list(&self, list: &List) -> Result<(), APIError> {
-    let response = self
-      .client
-      .put(format!("{}/itemList", self.base_url))
-      .body(self.encode(list)?)
-      .send()
-      .await?;
-
-    response.error_for_status()?;
-
-    Ok(())
-}
 }
 
 impl Deref for ApiService {
@@ -77,9 +73,6 @@ pub struct ApiClient {
 #[derive(Debug, Default)]
 pub struct ClientConfig {
   pub encoding: Encoding,
-  // because reqwest is broken on native we need to keep track of identity ourselves, for now
-  //#[cfg(not(target_arch = "wasm32"))]
-  cookie: Option<String>,
 }
 
 impl ApiClient {
@@ -162,57 +155,9 @@ impl ApiClient {
       }
     };
 
-    //#[cfg(not(target_arch = "wasm32"))]
-    {
-      tracing::debug!("Read cookie: {:?}", lock.cookie);
-      if let Some(cookie) = lock.cookie.clone() {
-        headers.insert(reqwest::header::COOKIE, unsafe {
-          HeaderValue::from_maybe_shared_unchecked(cookie)
-        });
-      }
-    }
-
     tracing::debug!("Sending headers: {headers:?}");
 
     headers
-  }
-
-  fn process_response_headers(&self, response: &Response) -> Result<(), APIError> {
-    // for now any cookies other than the id cookie are UB - requests may contain garbage c
-    //ookies
-    let first_cookie = if cfg!(not(target_arch = "wasm32")) {
-      if let Some(cookie) = response.headers().get(reqwest::header::SET_COOKIE) {
-        let cookie_value = match cookie.to_str() {
-          Ok(value) => Some(value),
-          Err(e) => {
-            tracing::warn!("Failed to parse cookie: {e}");
-            None
-          }
-        };
-        // ';' is a reserved character so this should work for a well-formed cookie
-        let parsed_cookie = cookie_value
-          .and_then(|cookie| cookie.split_once(';'))
-          .map(|strings| strings.0.to_owned());
-
-        parsed_cookie
-      } else {
-        None
-      }
-    } else {
-      None
-    };
-
-    //#[cfg(not(target_arch = "wasm32"))]
-    if let Some(cookie) = first_cookie {
-      let mut write_lock = self.config.write().unwrap();
-      tracing::debug!("Received and wrote Set-Cookie: {cookie}");
-      write_lock.cookie = Some(cookie);
-    }
-    else {
-      tracing::debug!("Received no Set-Cookie header");
-    }
-
-    Ok(())
   }
 
   async fn request<T: ApiObject<'static>>(
@@ -232,8 +177,6 @@ impl ApiClient {
       .headers(self.get_request_headers())
       .send()
       .await?;
-
-    self.process_response_headers(&response)?;
 
     response.error_for_status()?.bytes().await.map_err(Into::into)
   }
@@ -283,6 +226,15 @@ impl ApiClient {
         .try_into()
         .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
     ))
+  }
+
+  pub(crate) async fn update_list(&self, list: &List) -> Result<(), APIError> {
+    let url = format!("{}/itemList", self.base_url);
+
+    let _body = self.request(&url, Method::PUT, list).await?;
+    // nothing to extract/check here except for the response status (handled above)
+
+    Ok(())
   }
 
   pub async fn fetch_list(&self, list_id: &<List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {

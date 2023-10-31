@@ -6,20 +6,16 @@ use einkaufsliste::model::user::User;
 use crate::service::api::{APIError, ApiService};
 
 pub fn authentication_form(cx: Scope) -> Element {
-  let _api: AuthService = cx.consume_context()?;
-  let api = _api.clone(); // Clone for the closure :(
-  let _error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
-
-  let error_handler = _error_handler.clone();
+  let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
   let navigator = use_navigator(cx);
+  let use_user = use_shared_state::<Option<User>>(cx)?;
 
   let username = use_state(cx, String::new);
   let password = use_state(cx, String::new);
 
   let onlogin = move |_| {
-    let navigator = navigator.clone();
-    let api = api.clone();
-    let error_handler = error_handler.clone();
+    to_owned![error_handler, navigator, use_user];
+    let api: ApiService = cx.consume_context().unwrap();
 
     let name = username.get().clone();
     let password = password.get().clone();
@@ -28,7 +24,8 @@ pub fn authentication_form(cx: Scope) -> Element {
       let resp = api.login(LoginUserV1 { name, password }).await;
 
       match resp {
-        Ok(_) => {
+        Ok(user) => {
+          use_user.with_mut(|use_user| *use_user = Some(user));
           navigator.go_back();
         }
 
@@ -41,9 +38,8 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   let onregister = move |_| {
-    let navigator = navigator.clone();
-    let api = _api.clone();
-    let error_handler = _error_handler.clone();
+    to_owned![error_handler, navigator, use_user];
+    let api: ApiService = cx.consume_context().unwrap();
 
     let name = username.get().clone();
     let password = password.get().clone();
@@ -53,7 +49,8 @@ pub fn authentication_form(cx: Scope) -> Element {
 
       match resp {
         // Parse data from here, such as storing a response token
-        Ok(_data) => {
+        Ok(user) => {
+          use_user.with_mut(|use_user| *use_user = Some(user));
           navigator.go_back();
         }
 
@@ -108,43 +105,4 @@ pub fn authentication_form(cx: Scope) -> Element {
     button { onclick: onregister, "Register" }
     button {onclick: fetch_lists, "Fetch Lists"}
 })
-}
-
-// Service struct to handle authentication. It is not usually used manually as any unauthenticated request will cause a redirect to the login page
-#[derive(Clone)]
-pub struct AuthService {
-  api: ApiService,
-  user: UseState<Option<User>>,
-}
-
-impl AuthService {
-  pub fn new(api: ApiService, user: UseState<Option<User>>) -> Self {
-    Self { api, user }
-  }
-
-  async fn login(&self, credentials: LoginUserV1) -> Result<(), APIError> {
-    match self.api.login(credentials).await {
-      Ok(user) => {
-        self.user.set(Some(user));
-        Ok(())
-      }
-      Err(e) => {
-        self.user.set(None);
-        Err(e)
-      }
-    }
-  }
-
-  async fn register(&self, credentials: RegisterUserV1) -> Result<(), APIError> {
-    match self.api.register(credentials).await {
-      Ok(user) => {
-        self.user.set(Some(user));
-        Ok(())
-      }
-      Err(e) => {
-        self.user.set(None);
-        Err(e)
-      }
-    }
-  }
 }
