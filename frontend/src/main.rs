@@ -1,7 +1,4 @@
-#![feature(async_fn_in_trait)]
-
 use frontend::setup_tracing;
-use tracing_subscriber::filter::{LevelFilter, Targets};
 
 pub mod service;
 pub mod ui;

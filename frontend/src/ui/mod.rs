@@ -2,7 +2,8 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 use einkaufsliste::model::user::User;
 
-use crate::service::api::{use_provide_api_service, ApiService};
+use crate::service::api::use_provide_api_service;
+
 
 pub mod auth;
 pub mod error;
@@ -20,7 +21,7 @@ pub fn app(cx: Scope) -> Element {
   cx.render(rsx! { Router::<Route> {} })
 }
 
-#[inline_props]
+#[component(no_case_check)]
 fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let navigator = use_navigator(cx).clone();
   let _timeout = use_future(cx, (), |_| async move {

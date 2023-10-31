@@ -1,14 +1,12 @@
-use std::{future::Future, pin::Pin, ops::Deref};
-use std::marker::PhantomData;
-use std::mem::MaybeUninit;
-use std::rc::Rc;
+use std::future::Future;
+use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::{RwLock, RwLockReadGuard};
 use std::time::Instant;
 
-use dioxus::prelude::{use_ref, use_shared_state_provider, Coroutine, Scope, SvgAttributes, UseRef, UseState};
+use dioxus::prelude::*;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use url::form_urlencoded::Target;
 
 use super::api::{APIError, ApiService};
 
@@ -88,14 +86,17 @@ impl ListService {
     self.sync()
   }
 
+  // this lint is incorrect as clippy apparently cannot deal with the drop() call
+  #[allow(clippy::await_holding_lock)]
   async fn sync(&self) {
     async_std::task::sleep(TIMEOUT).await;
     // if the user has not edited the value since the edit this function was called for, sync to the server now
-    let inner = self.inner.read().unwrap();
-    if inner.last_edit.elapsed() > TIMEOUT {
-      let list_meta = <List as From<&FlatItemsList>>::from(&inner.data);
+
+    let lock = self.inner.read().unwrap();
+    if lock.last_edit.elapsed() > TIMEOUT {
+      let list_meta = <List as From<&FlatItemsList>>::from(&lock.data);
       // do not hold locks while waiting for the server
-      drop(inner);
+      drop(lock);
       let result = self.api_service.update_list(&list_meta).await;
 
       match result {
@@ -113,10 +114,13 @@ impl ListService {
   Returns `true` if the fetch was successful, otherwise it will return `false` and display the error to the user. Use this information to consider restarting the request.
   */
   pub async fn get_items(&self) -> bool {
-    let mut lock = self.inner.write().unwrap();
-    let list_id = lock.data.id;
+    let list_id = {
+      let lock = self.inner.read().unwrap();
+      lock.data.id
+    };
     match self.api_service.fetch_list(&list_id).await {
       Ok(list) => {
+        let mut lock = self.inner.write().unwrap();
         lock.data = list;
 
         true
@@ -130,7 +134,8 @@ impl ListService {
 }
 
 pub struct OwningHandle<'a, Container, Inner> {
-  inner: RwLockReadGuard<'a, Pin<Container>>,
+  // while inner is never read after extraction, it is still necesarry to hold ownership
+  _inner: RwLockReadGuard<'a, Pin<Container>>,
   extracted: *const Inner,
 }
 
@@ -139,9 +144,10 @@ impl<'a, Container, Inner> OwningHandle<'a, Container, Inner> {
     inner: RwLockReadGuard<'a, Pin<Container>>,
     extractor: Op,
   ) -> Self {
+    // we "cast" the Pin away since it is a `#[layout(transparent)]` struct and thus has the same memory layout as the inner type, which we require for our extractor
     let container: *const Container = unsafe { std::mem::transmute(inner.deref() as *const Pin<Container>) };
     let extracted = extractor(container);
-    Self { inner, extracted }
+    Self { _inner: inner, extracted }
   }
 }
 

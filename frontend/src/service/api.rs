@@ -1,5 +1,4 @@
 use std::array::TryFromSliceError;
-use std::cell::Cell;
 use std::ops::Deref;
 use std::path::Path;
 use std::rc::Rc;
@@ -7,20 +6,16 @@ use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 use dioxus::prelude::Scope;
-use dioxus_desktop::wry::http::request;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
-use reqwest::{Method, Response};
-#[cfg(not(target_arch = "wasm32"))]
-use reqwest_cookie_store::CookieStoreMutex;
+use reqwest::Method;
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
 use rkyv::CheckBytes;
-use tracing::debug;
 
 /*
  This file contains the API client and a reference counted Service for use in dioxus.
@@ -143,7 +138,7 @@ impl ApiClient {
 
   fn get_request_headers(&self) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    let mut lock = self.config.read().unwrap();
+    let lock = self.config.read().unwrap();
     match lock.encoding {
       Encoding::JSON => {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));

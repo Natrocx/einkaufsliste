@@ -1,12 +1,11 @@
 use dioxus::prelude::*;
 use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::list::FlatItemsList;
 
-use crate::service::api::ApiService;
 use crate::service::list::{use_provide_list_service, ListService};
 
 
-#[inline_props]
+#[component(no_case_check)]
 pub fn list_view(cx: Scope<'_>, id: u64) -> Element<'_> {
   use_provide_list_service(cx, || FlatItemsList {
     id: 0,
@@ -37,7 +36,7 @@ pub fn list_view(cx: Scope<'_>, id: u64) -> Element<'_> {
   x
 }
 
-#[inline_props]
+#[component(no_case_check)]
 fn item_view<'a>(cx: Scope, item: &'a Item) -> Element<'a> {
   render! {
     div {

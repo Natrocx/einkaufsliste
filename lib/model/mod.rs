@@ -10,6 +10,10 @@ pub mod session;
 pub mod shop;
 pub mod user;
 
+/**
+# Safety
+You must manually ensure that no two types have the same denominator.
+*/
 pub unsafe trait HasTypeDenominator {
   const DENOMINATOR: u64;
 }

@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use async_std::stream::StreamExt;
 use dioxus::prelude::*;
-use dioxus_router::prelude::{use_navigator, Navigator, Outlet};
+use dioxus_router::prelude::{use_navigator, Outlet};
 
 use crate::service::api::APIError;
 use crate::ui::Route;
 
-#[inline_props]
+#[component(no_case_check)]
 pub fn error_handler(cx: Scope) -> Element {
   let errors = use_ref(cx, HashSet::new);
   let navigator = use_navigator(cx).clone();
