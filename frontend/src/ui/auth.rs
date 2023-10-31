@@ -65,6 +65,27 @@ pub fn authentication_form(cx: Scope) -> Element {
     });
   };
 
+  let api_service = cx.consume_context::<ApiService>()?;
+  let error_handler = cx.consume_context::<Coroutine<APIError>>()?;
+  let fetch_lists = move |_| {
+    to_owned![api_service, error_handler];
+    cx.spawn(async move {
+      let resp = api_service.fetch_all_lists().await;
+
+      match resp {
+        // Parse data from here, such as storing a response token
+        Ok(_data) => {
+          println!("Fetched lists");
+        }
+
+        //Handle any errors from the fetch here
+        Err(err) => {
+          error_handler.send(err);
+        }
+      }
+    });
+  };
+
   cx.render(rsx! {
     h1 { "Login" }
     label { "Username" }
@@ -85,6 +106,7 @@ pub fn authentication_form(cx: Scope) -> Element {
     br {}
     button { onclick: onlogin, "Login" }
     button { onclick: onregister, "Register" }
+    button {onclick: fetch_lists, "Fetch Lists"}
 })
 }
 

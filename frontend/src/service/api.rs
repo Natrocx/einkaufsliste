@@ -78,7 +78,7 @@ pub struct ApiClient {
 pub struct ClientConfig {
   pub encoding: Encoding,
   // because reqwest is broken on native we need to keep track of identity ourselves, for now
-  #[cfg(not(target_arch = "wasm32"))]
+  //#[cfg(not(target_arch = "wasm32"))]
   cookie: Option<String>,
 }
 
@@ -91,13 +91,13 @@ impl ApiClient {
   #[cfg(feature = "dev-certificate")]
   #[cfg(not(target_arch = "wasm32"))]
   fn build_client() -> Result<reqwest::Client, APIError> {
-    //let cookie_store = Self::setup_cookiestore()?;
+    let cookie_store = Self::setup_cookiestore()?;
     let cert = reqwest::Certificate::from_pem(DEVELOPMENT_CERTIFICATE)?;
     reqwest::Client::builder()
       .add_root_certificate(cert)
       //.http2_prior_knowledge()
       .cookie_store(true)
-      //.cookie_provider(cookie_store)
+      .cookie_provider(cookie_store)
       .https_only(true)
       .build()
       .map_err(Into::into)
@@ -117,7 +117,7 @@ impl ApiClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  fn setup_cookiestore() -> Result<Arc<CookieStoreMutex>, APIError> {
+  fn setup_cookiestore() -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, APIError> {
     let app_dirs = platform_dirs::AppDirs::new(Some("einkaufsliste"), false).unwrap();
     let cookie_store_path = app_dirs.state_dir.join(Path::new("./cookies.json"));
     let cookie_store = {
@@ -128,7 +128,7 @@ impl ApiClient {
         reqwest_cookie_store::CookieStore::new(None)
       }
     };
-    let cookie_store = reqwest_cookie_store::CookieStoreMutex::new(cookie_store);
+    let cookie_store = reqwest_cookie_store::CookieStoreRwLock::new(cookie_store);
     let cookie_store = std::sync::Arc::new(cookie_store);
 
     Ok(cookie_store)
@@ -150,7 +150,7 @@ impl ApiClient {
 
   fn get_request_headers(&self) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    let mut lock = self.config.write().unwrap();
+    let mut lock = self.config.read().unwrap();
     match lock.encoding {
       Encoding::JSON => {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -162,10 +162,10 @@ impl ApiClient {
       }
     };
 
-    #[cfg(not(target_arch = "wasm32"))]
+    //#[cfg(not(target_arch = "wasm32"))]
     {
       tracing::debug!("Read cookie: {:?}", lock.cookie);
-      if let Some(cookie) = lock.cookie.take() {
+      if let Some(cookie) = lock.cookie.clone() {
         headers.insert(reqwest::header::COOKIE, unsafe {
           HeaderValue::from_maybe_shared_unchecked(cookie)
         });
@@ -178,7 +178,8 @@ impl ApiClient {
   }
 
   fn process_response_headers(&self, response: &Response) -> Result<(), APIError> {
-    // for now any cookies other than the id cookie are UB - requests may contain garbage cookies
+    // for now any cookies other than the id cookie are UB - requests may contain garbage c
+    //ookies
     let first_cookie = if cfg!(not(target_arch = "wasm32")) {
       if let Some(cookie) = response.headers().get(reqwest::header::SET_COOKIE) {
         let cookie_value = match cookie.to_str() {
@@ -201,10 +202,14 @@ impl ApiClient {
       None
     };
 
+    //#[cfg(not(target_arch = "wasm32"))]
     if let Some(cookie) = first_cookie {
       let mut write_lock = self.config.write().unwrap();
-      tracing::debug!("Received Set-Cookie: {cookie}");
+      tracing::debug!("Received and wrote Set-Cookie: {cookie}");
       write_lock.cookie = Some(cookie);
+    }
+    else {
+      tracing::debug!("Received no Set-Cookie header");
     }
 
     Ok(())
