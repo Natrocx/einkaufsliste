@@ -26,6 +26,7 @@ url = "2.4.1"
 platform-dirs = "0.3.0"
 fermi = "0.4.0"
 owning_ref = "0.4.1"
+const_format = "0.2.32"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus-desktop = {git = "https://github.com/dioxuslabs/dioxus"}
