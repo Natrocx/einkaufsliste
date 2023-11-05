@@ -1,10 +1,7 @@
-use std::rc::Rc;
-
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
-use reqwest::header::ACCESS_CONTROL_MAX_AGE;
 
 use crate::service::api::{APIError, ApiService};
 

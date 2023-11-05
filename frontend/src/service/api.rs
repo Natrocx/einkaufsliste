@@ -32,7 +32,7 @@ use rkyv::CheckBytes;
 #[cfg(not(target_arch = "wasm32"))]
 pub static DEVELOPMENT_CERTIFICATE: &[u8] = include_bytes!("./rootCA.pem");
 
-static COOKIE_STORE_FILE_NAME: &'static str = "cookies.json";
+static COOKIE_STORE_FILE_NAME: &str = "cookies.json";
 // default configuration
 #[cfg(not(target_arch = "wasm32"))]
 lazy_static::lazy_static! {

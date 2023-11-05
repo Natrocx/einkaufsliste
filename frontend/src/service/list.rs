@@ -22,7 +22,7 @@ pub struct ListServiceInner {
 
 /**
  This service is used to sync a list with the server. It facilitates batching of writes and ratelimiting of requests to the server.
-  Error handling is integrated with [error_handler](crate::ui::error::error_handler)/it's [Coroutine].
+  Error handling is integrated with [error_handler](crate::ui::error::error_handler)/it's [`Coroutine<ApiError>`](Coroutine).
 
 */
 pub struct ListService {
@@ -49,6 +49,9 @@ pub fn use_provide_list_service<T>(cx: Scope<'_, T>, init: impl FnOnce() -> Flat
   });
 }
 
+// I do not understand why I am not allowed to use this as an inherent associated type but this will do for now
+type Ref<'local, T> = OwningHandle<RwLockReadGuard<'local, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, T>;
+
 impl ListService {
   pub fn new(data: FlatItemsList, api_service: ApiService, error_handler: Coroutine<APIError>) -> Self {
     Self {
@@ -62,14 +65,12 @@ impl ListService {
   }
 
   // the code is so ugly, I'd rather hide it here
-  pub fn title(&self) -> OwningHandle<RwLockReadGuard<'_, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, String> {
+  pub fn title(&self) -> Ref<'_, String> {
     let lock = self.inner.read().unwrap();
     OwningHandle::new(lock, |lock| unsafe { &(*lock).data.name as *const String })
   }
 
-  pub fn items(
-    &self,
-  ) -> OwningHandle<RwLockReadGuard<'_, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, Vec<Rc<Item>>> {
+  pub fn items(&self) -> Ref<'_, Vec<Rc<Item>>> {
     let lock = self.inner.read().unwrap();
 
     OwningHandle::new(lock, |lock| unsafe { &(*lock).data.items as *const Vec<Rc<Item>>} )
@@ -117,6 +118,7 @@ impl ListService {
   */
   pub async fn get_items(&self) -> bool {
     let list_id = {
+      // we need to be careful to drop this here to avoid deadlocks
       let lock = self.inner.read().unwrap();
       lock.data.id
     };
