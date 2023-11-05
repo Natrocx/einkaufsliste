@@ -1,6 +1,6 @@
 use std::array::TryFromSliceError;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
@@ -11,8 +11,10 @@ use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
+use platform_dirs::AppDirs;
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::Method;
+use reqwest_cookie_store::CookieStoreRwLock;
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
 use rkyv::CheckBytes;
@@ -29,6 +31,14 @@ use rkyv::CheckBytes;
 // Avoid certificate errors on desktop
 #[cfg(not(target_arch = "wasm32"))]
 pub static DEVELOPMENT_CERTIFICATE: &[u8] = include_bytes!("./rootCA.pem");
+
+static COOKIE_STORE_FILE_NAME: &'static str = "cookies.json";
+// default configuration
+#[cfg(not(target_arch = "wasm32"))]
+lazy_static::lazy_static! {
+  static ref APP_DIR: std::path::PathBuf = AppDirs::new(Some("einkaufsliste"), false).unwrap().state_dir;
+  static ref COOKIE_STORE_PATH: std::path::PathBuf = APP_DIR.join(Path::new(COOKIE_STORE_FILE_NAME));
+}
 
 #[derive(Clone)]
 pub struct ApiService {
@@ -61,13 +71,24 @@ impl Deref for ApiService {
 #[derive(Debug)]
 pub struct ApiClient {
   config: RwLock<ClientConfig>,
+  cookie_store: Arc<CookieStoreRwLock>,
   base_url: String,
   client: reqwest::Client,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ClientConfig {
   pub encoding: Encoding,
+  pub cookie_store_base_path: PathBuf,
+}
+
+impl Default for ClientConfig {
+  fn default() -> Self {
+    Self {
+      encoding: Encoding::JSON,
+      cookie_store_base_path: APP_DIR.clone(),
+    }
+  }
 }
 
 impl ApiClient {
@@ -78,12 +99,11 @@ impl ApiClient {
 
   #[cfg(feature = "dev-certificate")]
   #[cfg(not(target_arch = "wasm32"))]
-  fn build_client() -> Result<reqwest::Client, APIError> {
-    let cookie_store = Self::setup_cookiestore()?;
+  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, APIError> {
     let cert = reqwest::Certificate::from_pem(DEVELOPMENT_CERTIFICATE)?;
     reqwest::Client::builder()
       .add_root_certificate(cert)
-      //.http2_prior_knowledge()
+      .http2_prior_knowledge()
       .cookie_store(true)
       .cookie_provider(cookie_store)
       .https_only(true)
@@ -93,8 +113,7 @@ impl ApiClient {
 
   #[cfg(not(feature = "dev-certificate"))]
   #[cfg(not(target_arch = "wasm32"))]
-  fn build_client() -> Result<reqwest::Client, APIError> {
-    let cookie_store = Self::setup_cookiestore()?;
+  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, APIError> {
     reqwest::Client::builder()
       .cookie_store(true)
       .cookie_provider(cookie_store)
@@ -105,11 +124,9 @@ impl ApiClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  fn setup_cookiestore() -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, APIError> {
-    let app_dirs = platform_dirs::AppDirs::new(Some("einkaufsliste"), false).unwrap();
-    let cookie_store_path = app_dirs.state_dir.join(Path::new("./cookies.json"));
+  fn setup_cookiestore(path: &Path) -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, APIError> {
     let cookie_store = {
-      if let Ok(file) = std::fs::File::open(cookie_store_path).map(std::io::BufReader::new) {
+      if let Ok(file) = std::fs::File::open(path.join(COOKIE_STORE_FILE_NAME)).map(std::io::BufReader::new) {
         // use re-exported version of `CookieStore` for crate compatibility
         reqwest_cookie_store::CookieStore::load_json(file).unwrap()
       } else {
@@ -122,17 +139,48 @@ impl ApiClient {
     Ok(cookie_store)
   }
 
+  /**
+  This function will panic if the CookieStore json file cannot be created.
+   */
+  pub fn save_cookiestore(&self) {
+    let read_lock = self.config.read().unwrap();
+
+    if !read_lock.cookie_store_base_path.exists() {
+      std::fs::create_dir_all(&read_lock.cookie_store_base_path).unwrap();
+    }
+
+    let mut writer = std::fs::File::create(read_lock.cookie_store_base_path.join(COOKIE_STORE_FILE_NAME))
+      .map(std::io::BufWriter::new)
+      .unwrap();
+    let store = self.cookie_store.read().unwrap();
+    store.save_json(&mut writer).unwrap();
+  }
+
   pub fn set_encoding(&self, encoding: Encoding) {
     self.config.write().unwrap().encoding = encoding;
   }
 
-  pub fn new(base_url: String) -> Result<Self, APIError> {
-    let client = Self::build_client()?;
+  pub fn new_with_config(base_url: String, config: ClientConfig) -> Result<Self, APIError> {
+    let cookie_store = Self::setup_cookiestore(&config.cookie_store_base_path)?;
+    let client = Self::build_client(cookie_store.clone())?;
 
     Ok(Self {
       client,
+      cookie_store,
       base_url,
-      config: RwLock::new(ClientConfig::default())
+      config: RwLock::new(config),
+    })
+  }
+
+  pub fn new(base_url: String) -> Result<Self, APIError> {
+    let cookie_store = Self::setup_cookiestore(&APP_DIR)?;
+    let client = Self::build_client(cookie_store.clone())?;
+
+    Ok(Self {
+      client,
+      cookie_store,
+      base_url,
+      config: RwLock::new(ClientConfig::default()),
     })
   }
 
@@ -150,7 +198,7 @@ impl ApiClient {
       }
     };
 
-    tracing::debug!("Sending headers: {headers:?}");
+    tracing::trace!("Sending headers: {headers:?}");
 
     headers
   }

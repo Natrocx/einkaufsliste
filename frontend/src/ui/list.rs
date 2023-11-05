@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::FlatItemsList;
@@ -13,15 +15,7 @@ pub fn list_view(cx: Scope<'_>, id: u64) -> Element<'_> {
     shop: None,
     image_id: None,
     items: vec![
-        Item {
-            id: 0,
-            name: "item1".into(),
-            amount: None,
-            unit: None,
-            checked: false,
-            article_id: None,
-            alternative_article_ids: None
-        }
+        Rc::new(Item{id:0,name:"item1".into(),amount:None,unit:None,checked:false,article_id:None,alternative_article_ids:None})
     ],
   });
   let list_service = use_shared_state::<ListService>(cx)?;
@@ -32,12 +26,16 @@ pub fn list_view(cx: Scope<'_>, id: u64) -> Element<'_> {
     // todo: add navigation/check all interactivity
 
     div { class: "flex gap-1" }
+    for item in lock.items().iter() {
+        rsx! ( item_view { item: item.clone() })
+    }
 };
   x
 }
 
+//TODO: evaluate normal reference
 #[component(no_case_check)]
-fn item_view<'a>(cx: Scope, item: &'a Item) -> Element<'a> {
+fn item_view(cx: Scope, item: Rc<Item>) -> Element {
   render! {
     div {
         span { item.name.as_str() }

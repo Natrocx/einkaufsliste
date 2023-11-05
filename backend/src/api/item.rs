@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use actix_web::{get, post, put, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
@@ -105,7 +107,7 @@ pub async fn get_item_list_flat(
         None
       }
     })
-    .map(|ivec| unsafe { rkyv::from_bytes_unchecked::<Item>(ivec.as_bytes()).unwrap() })
+    .map(|ivec| Rc::new(unsafe { rkyv::from_bytes_unchecked::<Item>(ivec.as_bytes()).unwrap() }))
     .collect::<Vec<_>>();
 
   let flat_items_list = FlatItemsList::from_list_and_items(list, vec);

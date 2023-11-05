@@ -1,0 +1,1 @@
+pub static NAVIGATE_BACK: &str = "arrow_back_ios";

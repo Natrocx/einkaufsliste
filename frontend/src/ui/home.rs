@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::list::List;
 
-use crate::{service::api::{APIError, ApiService}, ui::Route};
+use crate::{service::api::{APIError, ApiService}, ui::{Route, scaffold::Scaffold}};
 
 pub fn homepage(cx: Scope) -> Element {
   let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
@@ -50,28 +50,29 @@ pub fn homepage(cx: Scope) -> Element {
     })
   };
 
-  cx.render(rsx!(
-
-          lists.iter().map(|list| {
-              //whyever the compiler can't do that itself....
-              let api = &_api;
-              rsx!(
-                div {
-                  onclick: |_| {
-                    let navigator = use_navigator(cx);
-                    navigator.push(Route::List { id: list.id });
-                  },
-                  class: "flex flex-row flex-wrap gap-1",
-                  self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
-                }
-              )
-          }),
-    button {
-      class: "flex w-full justify-center rounded-md bg-teal-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
-      onclick: on_new,
-      "New List"
+  render!(
+    Scaffold { page_title: "Home".to_string(),
+        lists.iter().map(|list| {
+                //whyever the compiler can't do that itself....
+                let api = &_api;
+                rsx!(
+                    div {
+                    onclick: |_| {
+                        let navigator = use_navigator(cx);
+                        navigator.push(Route::List { id: list.id });
+                    },
+                    class: "flex flex-row flex-wrap gap-1",
+                    self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
+                    }
+                )
+            }),
+        button {
+            class: "flex w-full justify-center rounded-md bg-teal-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
+            onclick: on_new,
+            "New List"
+        }
     }
-  ))
+)
 }
 
 #[derive(PartialEq, Clone, Debug, Props)]
@@ -85,22 +86,20 @@ pub struct ListPreviewProps<'a> {
 // A Component that renders ListPreviewPops as a Card, fetching the image from the API or using a placeholder
 pub fn list_preview<'a>(cx: Scope<'a, ListPreviewProps<'a>>) -> Element {
   cx.render(rsx!(
-      div {
-          class: "flex flex-row content-center gap-1 mx-0.5 my-1 p-1 border border-teal-950 hover:border-teal-900 hover:border-2",
-          match cx.props.image_id {
-          Some(ref src_url) => {
-              rsx!(img { src: "{src_url}" })
-          },
-          None => rsx!( p {
-          class: "flex-shrink self-center leading-none pr-0.5",
-          "?"
+    div { class: "flex flex-row content-center gap-1 mx-0.5 my-1 p-1 border border-teal-950 hover:border-teal-900 hover:border-2",
+        match cx.props.image_id {
+        Some(ref src_url) => {
+            rsx!(img { src: "{src_url}" })
+        },
+        None => rsx!( p {
+        class: "flex-shrink self-center leading-none pr-0.5",
+        "?"
         }),
-          },
-          div {
-              class: "flex flex-col gap-x-1 flex-nowrap",
-              p { cx.props.name }
-              p { class: "text-xs text-teal-800", cx.props.shop_name}
-          }
-      }
-  ))
+        },
+        div { class: "flex flex-col gap-x-1 flex-nowrap",
+            p { cx.props.name }
+            p { class: "text-xs text-teal-800", cx.props.shop_name }
+        }
+    }
+))
 }

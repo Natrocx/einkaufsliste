@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, rc::Rc};
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{RwLock, RwLockReadGuard};
@@ -62,15 +62,17 @@ impl ListService {
   }
 
   // the code is so ugly, I'd rather hide it here
-  pub fn title(&self) -> OwningHandle<'_, Box<ListServiceInner>, String>  {
+  pub fn title(&self) -> OwningHandle<RwLockReadGuard<'_, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, String> {
     let lock = self.inner.read().unwrap();
     OwningHandle::new(lock, |lock| unsafe { &(*lock).data.name as *const String })
   }
 
-  pub fn items(&self) -> OwningHandle<'_, Box<ListServiceInner>, Vec<Item>> {
+  pub fn items(
+    &self,
+  ) -> OwningHandle<RwLockReadGuard<'_, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, Vec<Rc<Item>>> {
     let lock = self.inner.read().unwrap();
 
-    OwningHandle::new(lock, |lock| unsafe { &(*lock).data.items as *const Vec<Item>} )
+    OwningHandle::new(lock, |lock| unsafe { &(*lock).data.items as *const Vec<Rc<Item>>} )
   }
 
   /// Immediately updates the list with the provided updater and returns a future to sync with the server.
@@ -133,17 +135,18 @@ impl ListService {
   }
 }
 
-pub struct OwningHandle<'a, Container, Inner> {
+/// This struct enables one to derefence to any value that is protected by a ReadGuard/Smart Pointer which requires Ownership of the Smart Pointer. It further enables one to access only some fields of the inner type and therefore hide the inner structure of the data from consumers.
+///
+/// # Safety
+/// As long as the provided pointers are not manipulated and only dereferenced, using this struct is safe.
+pub struct OwningHandle<ReadGuard: Deref<Target = Pin<Container>>, Container, Inner> {
   // while inner is never read after extraction, it is still necesarry to hold ownership
-  _inner: RwLockReadGuard<'a, Pin<Container>>,
+  _inner: ReadGuard,
   extracted: *const Inner,
 }
 
-impl<'a, Container, Inner> OwningHandle<'a, Container, Inner> {
-  pub fn new<Op: FnOnce(*const Container) -> *const Inner>(
-    inner: RwLockReadGuard<'a, Pin<Container>>,
-    extractor: Op,
-  ) -> Self {
+impl<ReadGuard: Deref<Target = Pin<Container>>, Container, Inner> OwningHandle<ReadGuard, Container, Inner> {
+  pub fn new<Op: FnOnce(*const Container) -> *const Inner>(inner: ReadGuard, extractor: Op) -> Self {
     // we "cast" the Pin away since it is a `#[layout(transparent)]` struct and thus has the same memory layout as the inner type, which we require for our extractor
     let container: *const Container = unsafe { std::mem::transmute(inner.deref() as *const Pin<Container>) };
     let extracted = extractor(container);
@@ -151,7 +154,7 @@ impl<'a, Container, Inner> OwningHandle<'a, Container, Inner> {
   }
 }
 
-impl<'a, C, I> std::ops::Deref for OwningHandle<'a, C, I> {
+impl<R: Deref<Target = Pin<C>>, C, I> std::ops::Deref for OwningHandle<R, C, I> {
   type Target = I;
 
   fn deref(&self) -> &Self::Target {

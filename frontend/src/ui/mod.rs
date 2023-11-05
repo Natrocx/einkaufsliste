@@ -2,10 +2,10 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 use einkaufsliste::model::user::User;
 
-use crate::service::api::use_provide_api_service;
-
+use crate::service::api::{use_provide_api_service, ApiService};
 
 pub mod auth;
+pub mod consts;
 pub mod error;
 pub mod home;
 mod list;
@@ -14,11 +14,18 @@ pub mod scaffold;
 pub fn app(cx: Scope) -> Element {
   // we provide our api service through the context api
   use_provide_api_service(&cx, "https://localhost:8443".to_string());
+  let api_service: ApiService = cx.consume_context().unwrap();
+  use_on_destroy(cx, move || {
+    api_service.save_cookiestore();
+  });
+  render!(root_component {})
+}
 
+pub fn root_component(cx: Scope) -> Element {
   // The user state is located in the app to facilitate rerendering the entire app when the user relogs. There is nothing one can do without being logged in.
   use_shared_state_provider::<Option<User>>(cx, || None);
 
-  cx.render(rsx! { Router::<Route> {} })
+  render! { Router::<Route> {} }
 }
 
 #[component(no_case_check)]
