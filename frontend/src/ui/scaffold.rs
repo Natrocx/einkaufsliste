@@ -1,12 +1,12 @@
-
 use dioxus::html::*;
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
+use dioxus_signals::Signal;
 
 use crate::ui::consts;
 
 #[component]
-pub fn Scaffold<'a>(cx: Scope, page_title: String, children: Element<'a>) -> Element<'a> {
+pub fn PageHeader<'a>(cx: Scope, page_title: &'a str) -> Element {
   let navigator = use_navigator(cx);
   let show_back_navigation = navigator.can_go_back();
 
@@ -20,8 +20,7 @@ pub fn Scaffold<'a>(cx: Scope, page_title: String, children: Element<'a>) -> Ele
             }
             )
         }
-        p { page_title.as_str() }
+        p { page_title }
     }
-    children
 )
 }

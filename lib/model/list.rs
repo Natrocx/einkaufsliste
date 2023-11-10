@@ -38,7 +38,7 @@ pub struct FlatItemsList {
   pub name: String,
   pub shop: Option<<Shop as Identifiable>::Id>,
   pub image_id: Option<u64>,
-  pub items: Vec<Rc<Item>>,
+  pub items: Vec<Item>,
 }
 
 impl Eq for FlatItemsList {}
@@ -46,7 +46,7 @@ impl Eq for FlatItemsList {}
 impl_api_traits!(FlatItemsList);
 
 impl FlatItemsList {
-  pub fn from_list_and_items(list: List, vec: Vec<Rc<Item>>) -> Self {
+  pub fn from_list_and_items(list: List, vec: Vec<Item>) -> Self {
     FlatItemsList {
       id: list.id,
       name: list.name,
@@ -54,6 +54,19 @@ impl FlatItemsList {
       image_id: list.image_id,
       items: vec,
     }
+  }
+
+  pub fn into_list_and_items(self) -> (List, Vec<Item>) {
+    let items = self.items;
+    let meta = List {
+      id: self.id,
+      name: self.name,
+      shop: self.shop,
+      image_id: self.image_id,
+      items: items.iter().map(|item| item.id).collect(),
+    };
+
+    (meta, items)
   }
 }
 

@@ -12,13 +12,12 @@ mod list;
 pub mod scaffold;
 
 pub fn app(cx: Scope) -> Element {
-  // we provide our api service through the context api
   use_provide_api_service(&cx, "https://localhost:8443".to_string());
   let api_service: ApiService = cx.consume_context().unwrap();
   use_on_destroy(cx, move || {
     api_service.save_cookiestore();
   });
-  render!(root_component {})
+  render!( root_component {} )
 }
 
 pub fn root_component(cx: Scope) -> Element {
@@ -52,6 +51,6 @@ pub enum Route {
   Authentication,
   #[route("/:.._route", not_found)]
   PageNotFound { _route: Vec<String>},
-  #[route("/list/:id", list::list_view)]
+  #[route("/list/:id", list::ListLoader)]
   List { id: u64 },
 }

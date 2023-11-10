@@ -1,10 +1,12 @@
-use std::{future::Future, rc::Rc};
-use std::ops::Deref;
-use std::pin::Pin;
-use std::sync::{RwLock, RwLockReadGuard};
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::future::Future;
+use std::mem::MaybeUninit;
+use std::rc::Rc;
 use std::time::Instant;
 
 use dioxus::prelude::*;
+use dioxus_signals::{use_effect_with_dependencies, use_signal, Effect, ReadOnlySignal, Signal};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 
@@ -13,20 +15,24 @@ use super::api::{APIError, ApiService};
 //TODO: make configurable
 pub static TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
-pub struct ListServiceInner {
-  // basically a Rc<RefCell<FlatItemsList>>
-  data: FlatItemsList,
-  last_edit: Instant,
-  //TODO: maintain diff?
-}
 
 /**
  This service is used to sync a list with the server. It facilitates batching of writes and ratelimiting of requests to the server.
   Error handling is integrated with [error_handler](crate::ui::error::error_handler)/it's [`Coroutine<ApiError>`](Coroutine).
 
 */
+#[derive(Clone)]
 pub struct ListService {
-  inner: RwLock<Pin<Box<ListServiceInner>>>,
+  inner: Rc<ListServiceInner>,
+}
+
+// Contains data for both list meta and list items since handling items alone makes little sense
+pub struct ListServiceInner {
+  meta: Signal<List>,
+  meta_last_edit: Cell<Instant>,
+  items: Signal<Vec<Signal<Item>>>,
+  items_last_edit: Cell<Instant>,
+  changed_items: RefCell<HashMap<u64, Signal<Item>>>,
   api_service: ApiService,
   error_handler: Coroutine<APIError>,
 }
@@ -39,128 +45,97 @@ The hook will panic if any of the following services are not available:
   * [ApiService]
   * ErrorHandlers [Coroutine<APIError>]
 
-Panics may also occur, if the underlying UseRef is written to outside of the hook/service.
 */
-pub fn use_provide_list_service<T>(cx: Scope<'_, T>, init: impl FnOnce() -> FlatItemsList) {
-  use_shared_state_provider(cx, || {
+pub fn use_provide_list_service<Component, Initializer: FnOnce() -> Option<FlatItemsList>>(
+  cx: Scope<'_, Component>,
+  initial: Initializer,
+) {
+  let list_service = use_context_provider(cx, || {
+    // load required services from context
     let api_service = cx.consume_context::<ApiService>().unwrap();
     let error_handler = cx.consume_context::<Coroutine<APIError>>().unwrap();
-    ListService::new(init(), api_service, error_handler)
+    
+    // register seperate signals for items (for ItemViews) and Meta (for ListPage)
+    let (meta, items) = initial()?.into_list_and_items();
+    let meta = Signal::new(meta);
+    let items = Signal::new(items.into_iter().map(Signal::new).collect());
+
+    let mut list_service = ListService {
+      inner: ListServiceInner {
+      meta, 
+      meta_last_edit: Instant::now().into(),
+      items,
+      items_last_edit: Instant::now().into(),
+      changed_items: Default::default(),
+      api_service,
+      error_handler,
+    }.into() };
+  
+    // we register an effect that will sync the meta info with the server if it has not been updated for a while.
+    // since we require a handle to list_service here, we need to use a MaybeUninit to make a self-reference
+    
+    Some(list_service)
   });
 }
 
-// I do not understand why I am not allowed to use this as an inherent associated type but this will do for now
-type Ref<'local, T> = OwningHandle<RwLockReadGuard<'local, Pin<Box<ListServiceInner>>>, Box<ListServiceInner>, T>;
+pub fn use_item_effects(cx: Scope, list_service: ListService, item: Signal<Item>) {
+  tracing::trace!("Item component generation: {}", cx.generation());
+  dioxus_signals::use_effect(cx, move || {
+    to_owned![list_service];
+    list_service.item_changed(item);
+  });
+}
 
 impl ListService {
-  pub fn new(data: FlatItemsList, api_service: ApiService, error_handler: Coroutine<APIError>) -> Self {
-    Self {
-      inner: RwLock::new(Box::pin(ListServiceInner {
-        data,
-        last_edit: Instant::now(),
-      })),
-      api_service,
-      error_handler,
-    }
+  pub fn meta(&self) -> Signal<List> {
+    self.inner.meta
   }
 
-  // the code is so ugly, I'd rather hide it here
-  pub fn title(&self) -> Ref<'_, String> {
-    let lock = self.inner.read().unwrap();
-    OwningHandle::new(lock, |lock| unsafe { &(*lock).data.name as *const String })
+  /// Returns a read-only Signal to the items of the list.
+  ///
+  /// If you wish to modify the items, you must register your own effects to synchronise the changes with the server.
+  pub fn items(&self) -> Signal<Vec<Signal<Item>>> {
+    self.inner.items
   }
 
-  pub fn items(&self) -> Ref<'_, Vec<Rc<Item>>> {
-    let lock = self.inner.read().unwrap();
-
-    OwningHandle::new(lock, |lock| unsafe { &(*lock).data.items as *const Vec<Rc<Item>>} )
-  }
-
-  /// Immediately updates the list with the provided updater and returns a future to sync with the server.
-  pub fn update(&self, updater: impl FnOnce(&mut FlatItemsList)) -> impl Future + '_ {
-    // batch writes and drop writeguard
-    {
-      let mut inner = self.inner.write().unwrap();
-      updater(&mut inner.data);
-      inner.last_edit = Instant::now();
-    }
-
-    // update the server after a timeout/ratelimit
-    self.sync()
-  }
-
-  // this lint is incorrect as clippy apparently cannot deal with the drop() call
-  #[allow(clippy::await_holding_lock)]
-  async fn sync(&self) {
-    async_std::task::sleep(TIMEOUT).await;
-    // if the user has not edited the value since the edit this function was called for, sync to the server now
-
-    let lock = self.inner.read().unwrap();
-    if lock.last_edit.elapsed() > TIMEOUT {
-      let list_meta = <List as From<&FlatItemsList>>::from(&lock.data);
-      // do not hold locks while waiting for the server
-      drop(lock);
-      let result = self.api_service.update_list(&list_meta).await;
+  pub async fn sync_meta(&self) {
+    if Self::debounce(&self.inner.meta_last_edit).await {
+      let list_meta = self.inner.meta;
+      let result = self.inner.api_service.update_list(&list_meta.read()).await;
 
       match result {
         Ok(()) => (),
         Err(e) => {
-          self.error_handler.send(e);
+          self.inner.error_handler.send(e);
         }
       }
     }
+    // otherwise drop the future produced by this function and have the future, that was created by the edit, sync the meta info
   }
 
-  /**
-   * s
-  This function will attempt to fetch the [FlatItemsList] corresponding to the provided id and update the UIs use_ref.
-  Returns `true` if the fetch was successful, otherwise it will return `false` and display the error to the user. Use this information to consider restarting the request.
-  */
-  pub async fn get_items(&self) -> bool {
-    let list_id = {
-      // we need to be careful to drop this here to avoid deadlocks
-      let lock = self.inner.read().unwrap();
-      lock.data.id
-    };
-    match self.api_service.fetch_list(&list_id).await {
-      Ok(list) => {
-        let mut lock = self.inner.write().unwrap();
-        lock.data = list;
-
-        true
-      }
-      Err(e) => {
-        self.error_handler.send(e);
-        false
-      }
-    }
+  pub async fn sync_items(&self) {
+    todo!()
   }
-}
 
-/// This struct enables one to derefence to any value that is protected by a ReadGuard/Smart Pointer which requires Ownership of the Smart Pointer. It further enables one to access only some fields of the inner type and therefore hide the inner structure of the data from consumers.
-///
-/// # Safety
-/// As long as the provided pointers are not manipulated and only dereferenced, using this struct is safe.
-pub struct OwningHandle<ReadGuard: Deref<Target = Pin<Container>>, Container, Inner> {
-  // while inner is never read after extraction, it is still necesarry to hold ownership
-  _inner: ReadGuard,
-  extracted: *const Inner,
-}
-
-impl<ReadGuard: Deref<Target = Pin<Container>>, Container, Inner> OwningHandle<ReadGuard, Container, Inner> {
-  pub fn new<Op: FnOnce(*const Container) -> *const Inner>(inner: ReadGuard, extractor: Op) -> Self {
-    // we "cast" the Pin away since it is a `#[layout(transparent)]` struct and thus has the same memory layout as the inner type, which we require for our extractor
-    let container: *const Container = unsafe { std::mem::transmute(inner.deref() as *const Pin<Container>) };
-    let extracted = extractor(container);
-    Self { _inner: inner, extracted }
+  pub fn item_changed(&self, item: Signal<Item>) {
+    let item_id = item.read().id;
+    let mut changed_items = self.inner.changed_items.borrow_mut();
+    changed_items.insert(item_id, item);
   }
-}
 
-impl<R: Deref<Target = Pin<C>>, C, I> std::ops::Deref for OwningHandle<R, C, I> {
-  type Target = I;
+  /// Checks if edits have occured during the timeout.
+  ///
+  /// Returns true if the event "passed" the debouncing test and the reaction (syncing in this case) should be executed.
+  async fn debounce(last_edit: &Cell<Instant>) -> bool {
+    // memorize the time of the edit that triggered this function
+    last_edit.set(Instant::now());
 
-  fn deref(&self) -> &Self::Target {
-    // this is safe as we maintain ownership of the underlying data/lock and our type must be Pin
-    unsafe { &*self.extracted }
+    async_std::task::sleep(TIMEOUT).await;
+
+    // see if any edits occured during the timeout
+    let last_edit = last_edit.get();
+
+    // if no edits occured, sync the meta info with the server
+    last_edit.elapsed() > TIMEOUT 
   }
 }

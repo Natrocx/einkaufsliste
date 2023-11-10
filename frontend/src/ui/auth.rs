@@ -59,8 +59,7 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   cx.render(rsx! {
-    form {
-        onsubmit: move |evt| {
+    form { onsubmit: move |evt| {
             tracing::debug!("Encountered event: {:?}", evt);
             evt.stop_propagation();
             let username = evt.values["username"].first().unwrap().clone();

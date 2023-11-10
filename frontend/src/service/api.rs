@@ -85,7 +85,7 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
   fn default() -> Self {
     Self {
-      encoding: Encoding::JSON,
+      encoding: Encoding::default(),
       cookie_store_base_path: APP_DIR.clone(),
     }
   }
@@ -141,7 +141,7 @@ impl ApiClient {
 
   /**
   This function will panic if the CookieStore json file cannot be created.
-   */
+  */
   pub fn save_cookiestore(&self) {
     let read_lock = self.config.read().unwrap();
 
@@ -280,7 +280,7 @@ impl ApiClient {
     Ok(())
   }
 
-  pub async fn fetch_list(&self, list_id: &<List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
+  pub async fn fetch_list(&self, list_id: <List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
     let url = format!("{}/itemList/{}/flat", self.base_url, list_id);
 
     let body = self.request(&url, Method::GET, &()).await?;
