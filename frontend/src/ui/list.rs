@@ -1,9 +1,12 @@
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
+use dioxus_signals::Signal;
+use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 
 use crate::service::api::{APIError, ApiService};
-use crate::service::list::{use_provide_list_service, ListService};
+use crate::service::list::{use_provide_list_service, ListService, use_list_service};
+use crate::ui::consts::*;
 use crate::ui::scaffold::PageHeader;
 
 #[component]
@@ -13,8 +16,8 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
   let navigator = use_navigator(cx);
 
   // Fetch list from server and provide as context when successful
-  let temp_list: &UseState<Option<FlatItemsList>> = use_state(cx, || None);
-  use_provide_list_service(cx, || UseState::make_mut(temp_list).take());
+  let temp_list: &UseRef<Option<FlatItemsList>> = use_ref(cx, || None);
+  use_provide_list_service(cx, temp_list.write().take());
   let list_fetch_success = use_future(cx, id, move |id| {
     // copy Rc's
     to_owned![api, error_handler, navigator, temp_list];
@@ -39,7 +42,7 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
       render!(ListPage {})
     }
     Some(false) => {
-      render!("")
+      render!("Error??")
     }
     None => {
       render!("Loading")
@@ -49,13 +52,35 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
 
 #[component]
 pub fn ListPage(cx: Scope) -> Element<'_> {
-  let list_service = use_context::<ListService>(cx)?;
+  let list_service = use_list_service(cx);
   let meta = list_service.meta();
+  let items = list_service.items();
   
   let x = render! {
-      PageHeader { page_title: "{meta.read().name}"}
+      PageHeader { page_title: "{meta.read().name.as_str()}"}
       // todo: add navigation/check all interactivity
-
-  };
+      for item in items {
+        rsx!(ItemView {item: item })
+      }
+    };
   x
+}
+
+#[component]
+pub fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
+  render!(
+    div {
+      span {
+        class: "material-symbols-outlined",
+        if item.read().checked {
+          CHECKBOX_CHECKED
+        } else {
+          CHECKBOX_UNCHECKED
+        }
+      }
+      span {
+        "{item.read().name}"
+      }
+    }
+  )  
 }

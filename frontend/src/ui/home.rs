@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::list::List;
 
-use crate::{service::api::{APIError, ApiService}, ui::{Route, scaffold::PageHeader}};
+use crate::{service::api::{APIError, ApiService}, ui::{Route, scaffold::PageHeader, consts::ADD}};
 
 pub fn homepage(cx: Scope) -> Element {
   let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
@@ -52,24 +52,34 @@ pub fn homepage(cx: Scope) -> Element {
 
   render!(
       PageHeader { page_title: "Home" }
-      lists.iter().map(|list| {
+      if !lists.is_empty() {
+        rsx!(
+        lists.iter().map(|list| {
               //whyever the compiler can't do that itself....
               let api = &_api;
               rsx!(
-                  div {
-                  onclick: |_| {
-                      let navigator = use_navigator(cx);
-                      navigator.push(Route::List { id: list.id });
-                  },
-                  class: "flex flex-row flex-wrap gap-1",
-                  self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
-                  }
+                div {
+                onclick: |_| {
+                    let navigator = use_navigator(cx);
+                    navigator.push(Route::List { id: list.id });
+                },
+                class: "flex flex-row flex-wrap gap-1",
+                self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
+                }
               )
-          }),
+          }))
+        }
+        else {
+          rsx!(p { "You have no lists yet." })
+        }
+
       button {
-          class: "flex w-full justify-center rounded-md bg-teal-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
+          class: "flex justify-center rounded-full bg-teal-600 px-2.5 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
           onclick: on_new,
-          "New List"
+          span {
+            class: "material-symbols-outlined",
+            ADD
+          }
       }
   )
 }

@@ -14,6 +14,7 @@ use einkaufsliste::{ApiObject, Encoding};
 use platform_dirs::AppDirs;
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::Method;
+#[cfg(not(target_arch = "wasm32"))]
 use reqwest_cookie_store::CookieStoreRwLock;
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::validation::validators::{CheckDeserializeError, DefaultValidator};
@@ -71,6 +72,7 @@ impl Deref for ApiService {
 #[derive(Debug)]
 pub struct ApiClient {
   config: RwLock<ClientConfig>,
+  #[cfg(not(target_arch = "wasm32"))]
   cookie_store: Arc<CookieStoreRwLock>,
   base_url: String,
   client: reqwest::Client,
@@ -79,6 +81,7 @@ pub struct ApiClient {
 #[derive(Debug)]
 pub struct ClientConfig {
   pub encoding: Encoding,
+  #[cfg(not(target_arch = "wasm32"))]
   pub cookie_store_base_path: PathBuf,
 }
 
@@ -86,6 +89,7 @@ impl Default for ClientConfig {
   fn default() -> Self {
     Self {
       encoding: Encoding::default(),
+      #[cfg(not(target_arch = "wasm32"))]
       cookie_store_base_path: APP_DIR.clone(),
     }
   }
@@ -142,6 +146,7 @@ impl ApiClient {
   /**
   This function will panic if the CookieStore json file cannot be created.
   */
+#[cfg(not(target_arch = "wasm32"))]
   pub fn save_cookiestore(&self) {
     let read_lock = self.config.read().unwrap();
 
@@ -160,6 +165,7 @@ impl ApiClient {
     self.config.write().unwrap().encoding = encoding;
   }
 
+#[cfg(not(target_arch = "wasm32"))]
   pub fn new_with_config(base_url: String, config: ClientConfig) -> Result<Self, APIError> {
     let cookie_store = Self::setup_cookiestore(&config.cookie_store_base_path)?;
     let client = Self::build_client(cookie_store.clone())?;
@@ -172,6 +178,7 @@ impl ApiClient {
     })
   }
 
+#[cfg(not(target_arch = "wasm32"))]
   pub fn new(base_url: String) -> Result<Self, APIError> {
     let cookie_store = Self::setup_cookiestore(&APP_DIR)?;
     let client = Self::build_client(cookie_store.clone())?;
@@ -179,6 +186,17 @@ impl ApiClient {
     Ok(Self {
       client,
       cookie_store,
+      base_url,
+      config: RwLock::new(ClientConfig::default()),
+    })
+  }
+  
+#[cfg(target_arch = "wasm32")]
+  pub fn new(base_url: String) -> Result<Self, APIError> {
+    let client = Self::build_client()?;
+
+    Ok(Self {
+      client,
       base_url,
       config: RwLock::new(ClientConfig::default()),
     })

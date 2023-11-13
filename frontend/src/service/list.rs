@@ -46,17 +46,19 @@ The hook will panic if any of the following services are not available:
   * ErrorHandlers [Coroutine<APIError>]
 
 */
-pub fn use_provide_list_service<Component, Initializer: FnOnce() -> Option<FlatItemsList>>(
+pub fn use_provide_list_service<Component>(
   cx: Scope<'_, Component>,
-  initial: Initializer,
+  initial: Option<FlatItemsList>,
 ) {
-  let list_service = use_context_provider(cx, || {
+  if let Some(list) = initial {
+  let list_service = cx.provide_context({
+    let (meta, items) = list.into_list_and_items();
+
     // load required services from context
     let api_service = cx.consume_context::<ApiService>().unwrap();
     let error_handler = cx.consume_context::<Coroutine<APIError>>().unwrap();
     
     // register seperate signals for items (for ItemViews) and Meta (for ListPage)
-    let (meta, items) = initial()?.into_list_and_items();
     let meta = Signal::new(meta);
     let items = Signal::new(items.into_iter().map(Signal::new).collect());
 
@@ -76,6 +78,13 @@ pub fn use_provide_list_service<Component, Initializer: FnOnce() -> Option<FlatI
     
     Some(list_service)
   });
+  };
+}
+
+pub fn use_list_service(cx: Scope) -> &ListService {
+  // Clone Rc (if available) and flatten options
+  let maybe_service = use_context::<Option<ListService>>(cx).unwrap();
+  maybe_service.as_ref().unwrap()
 }
 
 pub fn use_item_effects(cx: Scope, list_service: ListService, item: Signal<Item>) {

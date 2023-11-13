@@ -14,6 +14,8 @@ pub mod scaffold;
 pub fn app(cx: Scope) -> Element {
   use_provide_api_service(&cx, "https://localhost:8443".to_string());
   let api_service: ApiService = cx.consume_context().unwrap();
+
+  #[cfg(not(target_arch = "wasm32"))]
   use_on_destroy(cx, move || {
     api_service.save_cookiestore();
   });
