@@ -6,7 +6,6 @@ pub mod ui;
 
 fn main() {
   setup_tracing();
-  println!("Hello, world! {}", vier);
   #[cfg(not(target_arch = "wasm32"))]
   {
     use dioxus_desktop::Config;
