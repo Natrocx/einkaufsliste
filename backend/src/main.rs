@@ -14,6 +14,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::config::{CookieContentSecurity, PersistentSession};
 use actix_session::SessionMiddleware;
 use actix_web::cookie::SameSite;
+use actix_web::middleware::Logger;
 use actix_web::HttpServer;
 use api::item::{get_item_list_flat, store_item_attached, store_item_list};
 use api::shop::{get_shop, store_shop};
@@ -84,7 +85,7 @@ async fn main() -> std::io::Result<()> {
 
     app
       .wrap(cors)
-      .wrap(tracing_actix_web::TracingLogger::default())
+      .wrap(Logger::default())
       .wrap(identity_mw)
       .wrap(
         SessionMiddleware::builder(session_store.clone(), cookie_priv_key.clone())

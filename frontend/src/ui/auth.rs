@@ -59,34 +59,47 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   cx.render(rsx! {
-    form { onsubmit: move |evt| {
-            tracing::debug!("Encountered event: {:?}", evt);
-            evt.stop_propagation();
-            let username = evt.values["username"].first().unwrap().clone();
-            let password = evt.values["password"].first().unwrap().clone();
-            do_auth(username, password)
-        },
-        label { "Username" }
-        input { r#type: "text", id: "username", name: "username", autofocus: true }
-        br {}
-        label { "Password" }
-        input { r#type: "password", id: "password", name: "password" }
-        br {}
-        // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
-        button {
-            r#type: "submit",
-            onclick: |_| {
-                auth_type.set(AuthType::Login);
-            },
-            "Login"
-        }
-        button {
-            r#type: "submit",
-            onclick: |_| {
-                auth_type.set(AuthType::Register);
-            },
-            "Register"
-        }
-    }
-})
+      form {
+          class: "flex flex-col max-w-xs items-center object-center",
+          onsubmit: move |evt| {
+              tracing::debug!("Encountered event: {:?}", evt);
+              evt.stop_propagation();
+              let username = evt.values["username"].first().unwrap().clone();
+              let password = evt.values["password"].first().unwrap().clone();
+              do_auth(username, password)
+          },
+          div { class: "flex flex-row space-x-4 text-left",
+              label { "Username" }
+              input {
+                  class: "flex-grow border-gray-500",
+                  r#type: "text",
+                  id: "username",
+                  name: "username",
+                  autofocus: true
+              }
+          }
+          div { class: "flex flex-row space-x-4",
+              label { "Password" }
+              input { r#type: "password", id: "password", name: "password" }
+          }
+          // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
+
+          div { class: "flex flex-row",
+              button {
+                  r#type: "submit",
+                  onclick: |_| {
+                      auth_type.set(AuthType::Login);
+                  },
+                  "Login"
+              }
+              button {
+                  r#type: "submit",
+                  onclick: |_| {
+                      auth_type.set(AuthType::Register);
+                  },
+                  "Register"
+              }
+          }
+      }
+  })
 }

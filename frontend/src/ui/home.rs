@@ -2,7 +2,10 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use einkaufsliste::model::list::List;
 
-use crate::{service::api::{APIError, ApiService}, ui::{Route, scaffold::PageHeader, consts::ADD}};
+use crate::service::api::{APIError, ApiService};
+use crate::ui::consts::ADD;
+use crate::ui::scaffold::PageHeader;
+use crate::ui::Route;
 
 pub fn homepage(cx: Scope) -> Element {
   let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
@@ -51,7 +54,7 @@ pub fn homepage(cx: Scope) -> Element {
   };
 
   render!(
-      PageHeader { page_title: "Home" }
+      PageHeader { "Home" }
       if !lists.is_empty() {
         rsx!(
         lists.iter().map(|list| {

@@ -30,7 +30,7 @@ async fn main() {
       .await
       .expect("Login with rkyv to be successful")
   );
-  
+
   // run 100 fetch_all_lists requests concurrently
   let mut tasks = (0..100).map(|_| {
     let client = client.clone();

@@ -19,7 +19,7 @@ pub fn app(cx: Scope) -> Element {
   use_on_destroy(cx, move || {
     api_service.save_cookiestore();
   });
-  render!( root_component {} )
+  render!(root_component {})
 }
 
 pub fn root_component(cx: Scope) -> Element {
@@ -39,14 +39,14 @@ fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let route = _route.join("/");
 
   cx.render(rsx! {
-    div { "The requested page at {route} could not be found. You are being redirected." }
-})
+      div { "The requested page at {route} could not be found. You are being redirected." }
+  })
 }
 
 #[derive(Routable, Clone)]
 #[rustfmt::skip]
 pub enum Route {
-  #[layout(error::error_handler)]
+  #[layout(error::ErrorHandler)]
   #[route("/", home::homepage)]
   Home,
   #[route("/auth", auth::authentication_form)]

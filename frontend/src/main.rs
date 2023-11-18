@@ -5,8 +5,6 @@ pub mod service;
 pub mod ui;
 
 fn main() {
-  let vier = Box::leak(Box::new(String::from("Juhuhuhu")));
-
   setup_tracing();
   println!("Hello, world! {}", vier);
   #[cfg(not(target_arch = "wasm32"))]

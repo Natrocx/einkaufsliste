@@ -146,7 +146,7 @@ impl ApiClient {
   /**
   This function will panic if the CookieStore json file cannot be created.
   */
-#[cfg(not(target_arch = "wasm32"))]
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn save_cookiestore(&self) {
     let read_lock = self.config.read().unwrap();
 
@@ -165,7 +165,7 @@ impl ApiClient {
     self.config.write().unwrap().encoding = encoding;
   }
 
-#[cfg(not(target_arch = "wasm32"))]
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn new_with_config(base_url: String, config: ClientConfig) -> Result<Self, APIError> {
     let cookie_store = Self::setup_cookiestore(&config.cookie_store_base_path)?;
     let client = Self::build_client(cookie_store.clone())?;
@@ -178,7 +178,7 @@ impl ApiClient {
     })
   }
 
-#[cfg(not(target_arch = "wasm32"))]
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn new(base_url: String) -> Result<Self, APIError> {
     let cookie_store = Self::setup_cookiestore(&APP_DIR)?;
     let client = Self::build_client(cookie_store.clone())?;
@@ -190,8 +190,8 @@ impl ApiClient {
       config: RwLock::new(ClientConfig::default()),
     })
   }
-  
-#[cfg(target_arch = "wasm32")]
+
+  #[cfg(target_arch = "wasm32")]
   pub fn new(base_url: String) -> Result<Self, APIError> {
     let client = Self::build_client()?;
 
@@ -242,6 +242,33 @@ impl ApiClient {
     response.error_for_status()?.bytes().await.map_err(Into::into)
   }
 
+  fn request_with_ref<'a, T: ApiObject<'static>>(
+    &'a self,
+    url: &'a str,
+    method: reqwest::Method,
+    body: std::cell::Ref<'a, T>,
+  ) -> impl core::future::Future<Output = Result<Bytes, APIError>> + 'a
+  where
+    <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
+    <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
+  {
+    let encoded_body = self.encode(body.deref());
+    // drop potential refcell guards before sending the request
+    drop(body);
+
+    async move {
+      let response = self
+        .client
+        .request(method, url)
+        .body(encoded_body?)
+        .headers(self.get_request_headers())
+        .send()
+        .await?;
+
+      response.error_for_status()?.bytes().await.map_err(Into::into)
+    }
+  }
+
   #[tracing::instrument]
   pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
     let url = format!("{}/login/v1", self.base_url);
@@ -289,10 +316,10 @@ impl ApiClient {
     ))
   }
 
-  pub(crate) async fn update_list(&self, list: &List) -> Result<(), APIError> {
+  pub(crate) async fn update_list_with_ref(&self, list: std::cell::Ref<'_, List>) -> Result<(), APIError> {
     let url = format!("{}/itemList", self.base_url);
 
-    let _body = self.request(&url, Method::PUT, list).await?;
+    let _body = self.request_with_ref(&url, Method::PUT, list).await?;
     // nothing to extract/check here except for the response status (handled above)
 
     Ok(())
