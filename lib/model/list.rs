@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
@@ -31,7 +29,7 @@ impl From<&FlatItemsList> for List {
 
 impl_api_traits!(List);
 
-#[derive(Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type

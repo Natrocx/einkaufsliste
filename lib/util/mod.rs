@@ -1,6 +1,6 @@
 /*
  * Adapted from actix documentation
-*/
+ */
 #[cfg(feature = "backend")]
 const MAX_SIZE: usize = 32_768; // max payload size in bytes
 #[cfg(feature = "backend")]

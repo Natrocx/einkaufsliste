@@ -8,12 +8,12 @@ use crate::service::api::APIError;
 use crate::ui::Route;
 
 #[component(no_case_check)]
-pub fn error_handler(cx: Scope) -> Element {
+pub fn ErrorHandler(cx: Scope) -> Element {
   let errors = use_ref(cx, HashSet::new);
   let navigator = use_navigator(cx).clone();
 
   use_coroutine(cx, |mut rx: UnboundedReceiver<APIError>| {
-    to_owned![ errors, navigator ];
+    to_owned![errors, navigator];
     async move {
       while let Some(error) = rx.next().await {
         // first we check the error type
@@ -47,11 +47,11 @@ pub fn error_handler(cx: Scope) -> Element {
   });
 
   render! {
-    Outlet::<Route> {}
-    errors.read().iter().map(|error| {
-                        rsx! {
-                        p { error.as_str() }
-                        }
-                    })
-}
+      Outlet::<Route> {}
+      errors.read().iter().map(|error| {
+                          rsx! {
+                          p { error.as_str() }
+                          }
+                      })
+  }
 }
