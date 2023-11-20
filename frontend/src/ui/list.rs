@@ -45,7 +45,7 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
 
   match list_fetch_success.value() {
     Some(true) => {
-      render!(ListPage {})
+      render!( ListPage {} )
     }
     Some(false) => {
       render!("Error??")
@@ -57,64 +57,68 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
 }
 
 #[component]
-pub fn ListPage(cx: Scope) -> Element<'_> {
+pub(super) fn ListPage(cx: Scope) -> Element<'_> {
   let list_service = use_list_service(cx);
   let meta = list_service.meta();
   let items = list_service.items();
 
   let x = render! {
-    PageHeader {
-      input {
-        onchange: move |evt| meta.write().name = evt.value.clone(),
-        value: "{meta.read().name.as_str()}"
-      }
+    PageHeader { 
+        input {
+            onchange: move |evt| meta.write().name = evt.value.clone(),
+            value: "{meta.read().name.as_str()}"
+        }
     }
     for item in items {
-      ItemView {item : item}
+        ItemView { item: item }
     }
-    div {
-      class: "flex",
-      button {
-        class: "material-symbols-outlined",
-        onclick: move |_| items.write().push(Signal::new(Item {name: "".to_string(), checked: false,  id: 0 ,amount: None, unit: None, article_id: None, alternative_article_ids: None})),
-        ADD
-      }
-      input {"search"}
-      span {
-        class: "material-symbols-outlined",
-        SEARCH
-      }
-
+    div { class: "flex",
+        button {
+            class: "material-symbols-outlined",
+            onclick: move |_| {
+                items
+                    .write()
+                    .push(
+                        Signal::new(Item {
+                            name: "".to_string(),
+                            checked: false,
+                            id: 0,
+                            amount: None,
+                            unit: None,
+                            article_id: None,
+                            alternative_article_ids: None,
+                        }),
+                    )
+            },
+            ADD
+        }
+        input { "search" }
+        span { class: "material-symbols-outlined", SEARCH }
     }
-  };
+};
   x
 }
 
 #[component]
-pub fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
+pub(super) fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
   let list_service = use_list_service(cx);
   // sync updates
   use_item_effects(cx, list_service.clone(), *item);
   render!(
-    div {
-      class: "flex",
-      span {
-        class: "material-symbols-outlined",
-        if item.read().checked {
-          CHECKBOX_CHECKED
-        } else {
-          CHECKBOX_UNCHECKED
+    div { class: "flex",
+        span { class: "material-symbols-outlined",
+            if item.read().checked {
+            CHECKBOX_CHECKED
+            } else {
+            CHECKBOX_UNCHECKED
+            }
         }
-      }
-      input {
-        class: "flex-grow",
-        onchange: move |evt| item.write().name = evt.value.clone(),
-        "{item.read().name}"
-      }
-      span {
-        class: "material-symbols-outlined",
-        DELETE
-      }
+        input {
+            class: "flex-grow",
+            onchange: move |evt| item.write().name = evt.value.clone(),
+            value: "{item.read().name}"
+        }
+        span { class: "material-symbols-outlined", DELETE }
     }
-  )
+)
 }

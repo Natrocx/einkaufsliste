@@ -10,6 +10,7 @@ use dioxus::prelude::*;
 use dioxus_signals::{use_effect_with_dependencies, use_signal, Effect, ReadOnlySignal, Signal};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::requests::UpsertItems;
 
 use super::api::{APIError, ApiService};
 
@@ -29,14 +30,13 @@ pub struct ListService {
 // Contains data for both list meta and list items since handling items alone makes little sense
 pub struct ListServiceInner {
   meta: Signal<List>,
-  meta_last_edit: Cell<Instant>,
   items: Signal<Vec<Signal<Item>>>,
-  items_last_edit: Cell<Instant>,
   changed_items: RefCell<HashMap<u64, Signal<Item>>>,
   api_service: ApiService,
   error_handler: Coroutine<APIError>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SyncType {
   Meta,
   Items,
@@ -73,9 +73,7 @@ pub fn use_provide_list_service<Component>(cx: Scope<'_, Component>, initial: Op
         let list_service = ListService {
           inner: ListServiceInner {
             meta,
-            meta_last_edit: Instant::now().into(),
             items,
-            items_last_edit: Instant::now().into(),
             changed_items: Default::default(),
             api_service,
             error_handler,
@@ -89,19 +87,19 @@ pub fn use_provide_list_service<Component>(cx: Scope<'_, Component>, initial: Op
           to_owned![list_service];
           async move {
             while let Some(sync_type) = rx.next().await {
+            tracing::trace!("Received sync request: {sync_type:?}");
               match sync_type {
                 SyncType::Meta => list_service.sync_meta().await,
                 SyncType::Items => list_service.sync_items().await,
               }
             }
           }
-        })
+       })
         .clone();
 
         let effect_service = list_service.clone();
         dioxus_signals::use_effect(cx, move || {
           let _ = effect_service.meta().read();
-          tracing::trace!("Sending meta sync request to list_service");
           syncer.send(SyncType::Meta);
         });
 
@@ -124,9 +122,11 @@ pub fn use_list_service<Component>(cx: Scope<'_, Component>) -> &ListService {
 /// Create all the effects required to sync the list with the server. 
 /// The effects will not be returned as there is no need to directly interact with them.
 pub fn use_item_effects<Component>(cx: Scope<'_, Component>, list_service: ListService, item: Signal<Item>) {
+let syncer = use_coroutine_handle(cx).unwrap().clone();
   dioxus_signals::use_effect(cx, move || {
     to_owned![list_service];
     list_service.item_changed(item);
+    syncer.send(SyncType::Items);
   });
 }
 
@@ -142,9 +142,10 @@ impl ListService {
     self.inner.items
   }
 
+  #[tracing::instrument(skip(self))]
   pub async fn sync_meta(&self) {
-    if Self::debounce(&self.inner.meta_last_edit).await {
       let list_meta = self.inner.meta;
+      // extract binary representation of list meta and drop RefGuard before awaiting
       let fut = self.inner.api_service.update_list_with_ref(list_meta.read());
       let result = fut.await;
 
@@ -154,12 +155,23 @@ impl ListService {
           self.inner.error_handler.send(e);
         }
       }
-    }
-    // otherwise drop the future produced by this function and have the future, that was created by the edit, sync the meta info
   }
 
+  #[tracing::instrument(skip(self))]
   pub async fn sync_items(&self) {
-    todo!()
+    // TODO make untracked when it is implemented
+    let list_id = self.inner.meta.read().id;
+    let changed_items = self.inner.changed_items.borrow_mut().drain().map(|(_, item)| item()).collect::<Vec<_>>();
+
+    let fut = self.inner.api_service.upsert_items_with_ref( list_id, changed_items); 
+    let result = fut.await;
+
+    match result {
+        Ok(_) => (),
+        Err(e) => {
+          self.inner.error_handler.send(e);
+        }
+    }
   }
 
   pub fn item_changed(&self, item: Signal<Item>) {
@@ -168,19 +180,4 @@ impl ListService {
     changed_items.insert(item_id, item);
   }
 
-  /// Checks if edits have occured during the timeout.
-  ///
-  /// Returns true if the event "passed" the debouncing test and the reaction (syncing in this case) should be executed.
-  async fn debounce(last_edit: &Cell<Instant>) -> bool {
-    // memorize the time of the edit that triggered this function
-    last_edit.set(Instant::now());
-
-    async_std::task::sleep(TIMEOUT).await;
-
-    // see if any edits occured during the timeout
-    let last_edit = last_edit.get();
-
-    // if no edits occured, sync the meta info with the server
-    last_edit.elapsed() > TIMEOUT
-  }
 }

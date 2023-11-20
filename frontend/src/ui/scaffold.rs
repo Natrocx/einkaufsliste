@@ -11,19 +11,19 @@ pub fn PageHeader<'a>(cx: Scope, children: Element<'a>) -> Element {
   let show_back_navigation = navigator.can_go_back();
 
   render!(
-      //page header with title and nav
-      div {
-          if show_back_navigation {
-              rsx!(
-                  GoBackButton {
-                      span {
-                          class: "material-symbols-outlined",
-                          consts::NAVIGATE_BACK
-                  }
-              }
-              )
-          }
-          children
-      }
-  )
+    //page header with title and nav
+    div {
+        if show_back_navigation {
+            rsx!(
+                GoBackButton {
+                    span {
+                        class: "material-symbols-outlined",
+                        consts::NAVIGATE_BACK
+                }
+            }
+            )
+        }
+        children
+    }
+)
 }

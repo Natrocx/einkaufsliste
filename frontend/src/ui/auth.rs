@@ -4,6 +4,7 @@ use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
 use einkaufsliste::model::user::User;
 
 use crate::service::api::{APIError, ApiService};
+use crate::ui::consts::*;
 
 #[derive(Debug, Clone, Copy)]
 enum AuthType {
@@ -59,47 +60,54 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   cx.render(rsx! {
-      form {
-          class: "flex flex-col max-w-xs items-center object-center",
-          onsubmit: move |evt| {
-              tracing::debug!("Encountered event: {:?}", evt);
-              evt.stop_propagation();
-              let username = evt.values["username"].first().unwrap().clone();
-              let password = evt.values["password"].first().unwrap().clone();
-              do_auth(username, password)
-          },
-          div { class: "flex flex-row space-x-4 text-left",
-              label { "Username" }
-              input {
-                  class: "flex-grow border-gray-500",
-                  r#type: "text",
-                  id: "username",
-                  name: "username",
-                  autofocus: true
-              }
-          }
-          div { class: "flex flex-row space-x-4",
-              label { "Password" }
-              input { r#type: "password", id: "password", name: "password" }
-          }
-          // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
+    form {
+        class: "flex flex-col items-center object-center space-y-4 p-2 ",
+        onsubmit: move |evt| {
+            tracing::debug!("Encountered event: {:?}", evt);
+            evt.stop_propagation();
+            let username = evt.values["username"].first().unwrap().clone();
+            let password = evt.values["password"].first().unwrap().clone();
+            do_auth(username, password)
+        },
+        div { class: "flex flex-col text-left w-full",
+            label { class: "pl-2", r#for: "username", "Username" }
+            input {
+                class: "w-full p-1 {INPUT_PRIMARY}",
+                r#type: "text",
+                id: "username",
+                name: "username",
+                autofocus: true
+            }
+        }
+        div { class: "flex flex-col text-left w-full",
+            label { r#for: "password", class: "pl-2", "Password" }
+            input {
+                class: "w-full p-1 {INPUT_PRIMARY}",
+                r#type: "password",
+                id: "password",
+                name: "password"
+            }
+        }
+        // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
 
-          div { class: "flex flex-row",
-              button {
-                  r#type: "submit",
-                  onclick: |_| {
-                      auth_type.set(AuthType::Login);
-                  },
-                  "Login"
-              }
-              button {
-                  r#type: "submit",
-                  onclick: |_| {
-                      auth_type.set(AuthType::Register);
-                  },
-                  "Register"
-              }
-          }
-      }
-  })
+        div { class: "flex flex-row space-x-4",
+            button {
+                class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
+                r#type: "submit",
+                onclick: |_| {
+                    auth_type.set(AuthType::Login);
+                },
+                "Login"
+            }
+            button {
+              class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
+                r#type: "submit",
+                onclick: |_| {
+                    auth_type.set(AuthType::Register);
+                },
+                "Register"
+            }
+        }
+    }
+})
 }

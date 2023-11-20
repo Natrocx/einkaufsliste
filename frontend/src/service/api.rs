@@ -1,4 +1,5 @@
 use std::array::TryFromSliceError;
+use std::cell::Ref;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -6,8 +7,9 @@ use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
 use dioxus::prelude::Scope;
+use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1};
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, UpsertItems};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
@@ -41,7 +43,7 @@ lazy_static::lazy_static! {
   static ref COOKIE_STORE_PATH: std::path::PathBuf = APP_DIR.join(Path::new(COOKIE_STORE_FILE_NAME));
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ApiService {
   inner: Rc<ApiClient>,
 }
@@ -321,6 +323,17 @@ impl ApiClient {
 
     let _body = self.request_with_ref(&url, Method::PUT, list).await?;
     // nothing to extract/check here except for the response status (handled above)
+
+    Ok(())
+  }
+
+  pub async fn upsert_items_with_ref(&self, list_id: u64, items: Vec<Ref<'_, Item>>) -> Result<(), APIError> {
+    let url = format!("{}/items", self.base_url);
+    // TODO: optimise?
+    let items: Vec<Item> = (&items).iter().map(|item| Item::clone(item)).collect();
+
+   self.request(&url, Method::PUT, &UpsertItems{ list_id, items }).await?;
+   
 
     Ok(())
   }
