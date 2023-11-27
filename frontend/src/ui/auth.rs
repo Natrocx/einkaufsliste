@@ -100,7 +100,7 @@ pub fn authentication_form(cx: Scope) -> Element {
                 "Login"
             }
             button {
-              class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
+                class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
                 r#type: "submit",
                 onclick: |_| {
                     auth_type.set(AuthType::Register);

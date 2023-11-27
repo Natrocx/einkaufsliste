@@ -1,6 +1,8 @@
 use rkyv::{Archive, Deserialize, Serialize};
 
 use super::item::Item;
+use super::list::List;
+use super::Identifiable;
 use crate::impl_api_traits;
 
 /// Command-pattern based structs to be used as request parameters
@@ -10,8 +12,6 @@ pub struct StoreItemAttached {
   pub item: Item,
   pub list_id: u64,
 }
-
-#[cfg(feature = "backend")]
 impl_api_traits!(StoreItemAttached);
 
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
@@ -20,7 +20,6 @@ pub struct RegisterUserV1 {
   pub name: String,
   pub password: String,
 }
-
 impl_api_traits!(RegisterUserV1);
 
 #[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
@@ -29,5 +28,5 @@ pub struct LoginUserV1 {
   pub name: String,
   pub password: String,
 }
-
 impl_api_traits!(LoginUserV1);
+

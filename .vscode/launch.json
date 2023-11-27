@@ -30,7 +30,10 @@
         "filter": {
           "name": "frontend",
           "kind": "bin"
-        }
+        },
+      },
+      "env": {
+          "WEBKIT_DISABLE_COMPOSITING_MODE": "1"
       },
       "args": [],
       "cwd": "${workspaceFolder}"

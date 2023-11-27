@@ -9,7 +9,7 @@ use bytes::Bytes;
 use dioxus::prelude::Scope;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, UpsertItems};
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
@@ -48,11 +48,11 @@ pub struct ApiService {
   inner: Rc<ApiClient>,
 }
 
-pub fn use_provide_api_service(cx: &Scope, base_url: String) {
+pub fn use_provide_api_service<'a>(cx: &'a Scope<'a>, base_url: String) -> &'a ApiService {
   cx.use_hook(|| {
     let api_service = ApiService::new(base_url).unwrap();
     cx.provide_context(api_service)
-  });
+  })
 }
 
 impl ApiService {
@@ -68,6 +68,14 @@ impl Deref for ApiService {
 
   fn deref(&self) -> &Self::Target {
     &self.inner
+  }
+}
+
+impl Drop for ApiClient {
+  fn drop(&mut self) {
+    #[cfg(not(target_arch = "wasm32"))]
+    self.save_cookiestore();
+    tracing::debug!("Dropped ApiClient - this should only happen on shutdown")
   }
 }
 
@@ -132,10 +140,16 @@ impl ApiClient {
   #[cfg(not(target_arch = "wasm32"))]
   fn setup_cookiestore(path: &Path) -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, APIError> {
     let cookie_store = {
-      if let Ok(file) = std::fs::File::open(path.join(COOKIE_STORE_FILE_NAME)).map(std::io::BufReader::new) {
+      let actual_path = path.join(COOKIE_STORE_FILE_NAME);
+      if let Ok(file) = std::fs::File::open(&actual_path).map(std::io::BufReader::new) {
         // use re-exported version of `CookieStore` for crate compatibility
+        tracing::debug!("Loaded cookie store from path: {:?}", actual_path);
         reqwest_cookie_store::CookieStore::load_json(file).unwrap()
       } else {
+        tracing::debug!(
+          "Tried loading cookie store, but none found at {}. Creating new one.",
+          actual_path.display()
+        );
         reqwest_cookie_store::CookieStore::new(None)
       }
     };
@@ -255,7 +269,7 @@ impl ApiClient {
     <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
   {
     let encoded_body = self.encode(body.deref());
-    // drop potential refcell guards before sending the request
+    // drop refcell guards before sending the request and consequently yielding at next .await
     drop(body);
 
     async move {
@@ -327,15 +341,28 @@ impl ApiClient {
     Ok(())
   }
 
-  pub async fn upsert_items_with_ref(&self, list_id: u64, items: Vec<Ref<'_, Item>>) -> Result<(), APIError> {
-    let url = format!("{}/items", self.base_url);
-    // TODO: optimise?
-    let items: Vec<Item> = (&items).iter().map(|item| Item::clone(item)).collect();
+  pub async fn update_item_with_ref(&self, item: Ref<'_, Item>) -> Result<(), APIError> {
+    let url = format!("{}/item", self.base_url);
 
-   self.request(&url, Method::PUT, &UpsertItems{ list_id, items }).await?;
-   
+    self.request_with_ref(&url, Method::PUT, item).await?;
 
     Ok(())
+  }
+
+  pub async fn new_item(&self, list_id: u64, item: Item) -> Result<u64, APIError> {
+    let url = format!("{}/item", self.base_url);
+
+    // todo: read_untracked?
+    let body = self
+      .request(&url, Method::POST, &StoreItemAttached { list_id, item })
+      .await?;
+
+    Ok(u64::from_be_bytes(
+      body
+        .as_ref()
+        .try_into()
+        .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
+    ))
   }
 
   pub async fn fetch_list(&self, list_id: <List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {

@@ -11,7 +11,7 @@ pub fn homepage(cx: Scope) -> Element {
   let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
   let _navigator = use_navigator(cx);
   let lists = use_state(cx, std::vec::Vec::new);
-  let api = cx.consume_context::<ApiService>()?;
+  let api = use_context::<ApiService>(cx)?;
   // retain one copy of the api for the cx.render call at the bottom of the function
   let _api = api.clone();
 

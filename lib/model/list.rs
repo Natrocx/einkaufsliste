@@ -29,7 +29,7 @@ impl From<&FlatItemsList> for List {
 
 impl_api_traits!(List);
 
-#[derive(Debug, Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type

@@ -12,13 +12,12 @@ mod list;
 pub mod scaffold;
 
 pub fn app(cx: Scope) -> Element {
-  use_provide_api_service(&cx, "https://localhost:8443".to_string());
-  let api_service: ApiService = cx.consume_context().unwrap();
+  // Component should never be reconstructed - it will cause errors if it is
+  debug_assert_eq!(cx.generation(), 0);
 
-  #[cfg(not(target_arch = "wasm32"))]
-  use_on_destroy(cx, move || {
-    api_service.save_cookiestore();
-  });
+  // provide api service and retain Rc for cleanup
+  let api_service = use_provide_api_service(&cx, "https://localhost:8443".to_string()).clone();
+
   render!( root_component {} )
 }
 

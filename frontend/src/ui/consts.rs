@@ -11,6 +11,6 @@ pub const DELETE: &str = "delete";
 // Tailwindcss colours
 pub const PRIMARY_BG: &str = "dark:bg-zinc-900 bg-white ";
 pub const SECONDARY_BG: &str = "dark:bg-zinc-800 bg-gray-100 ";
-pub const TERTIARY_BG: &str = "dark:bg-zinc-700 bg-gray-200 ";
 pub const BORDER_SMALL: &str = "dark:border-zinc-500 border-gray-300 border p-1 rounded ";
 pub const INPUT_PRIMARY: &str = concatcp!(SECONDARY_BG, BORDER_SMALL, "hover:border-2 ");
+pub const INLINE_INPUT: &str = concatcp!(PRIMARY_BG, "hover:border-b -mb-px"); // negative margin to avoid layout changes on border creation

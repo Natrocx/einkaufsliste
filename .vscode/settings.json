@@ -5,4 +5,10 @@
   "rust-analyzer.checkOnSave.command": "clippy",
   "rust-analyzer.checkOnSave.features": "backend",
   //"rust-analyzer.cargo.target": "wasm32-unknown-unknown"
+  "tailwindCSS.experimental.classRegex": [
+    "class: \"(.*)\""
+ ],
+ "tailwindCSS.includeLanguages": {
+     "rust": "html"
+ },
 }

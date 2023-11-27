@@ -12,7 +12,7 @@ pub fn PageHeader<'a>(cx: Scope, children: Element<'a>) -> Element {
 
   render!(
     //page header with title and nav
-    div {
+    div { class: "flex flex-nowrap flex-row",
         if show_back_navigation {
             rsx!(
                 GoBackButton {
