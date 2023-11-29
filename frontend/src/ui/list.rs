@@ -7,17 +7,20 @@ use dioxus_router::prelude::use_navigator;
 use dioxus_signals::{use_signal, Effect, Signal};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
+use tracing::debug;
 
 use crate::service::api::{APIError, ApiService};
 use crate::ui::consts::*;
 use crate::ui::scaffold::PageHeader;
 use crate::ui::Route;
 
+#[derive(Debug, Clone)]
 enum SyncType {
   Meta(Signal<List>),
   NewItem(u64, Signal<Item>),
   UpdateItem(Signal<Item>),
 }
+
 #[component]
 pub fn ListLoader(cx: Scope, id: u64) -> Element {
   let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
@@ -27,15 +30,17 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
     to_owned![api, error_handler];
     async move {
       while let Some(message) = rx.next().await {
+        tracing::debug!("Syncing with backend: {:?}", message);
         let api_result = match message {
           SyncType::Meta(meta) => api.update_list_with_ref(meta.read()).await,
           SyncType::UpdateItem(item) => api.update_item_with_ref(item.read()).await,
           // When a new item is created, we need to tell the backend which list it belongs to;
           // the backend will further generate a new id for the item which is set here.
-          SyncType::NewItem(list_id, item) => api
-            .new_item(list_id, item.read().clone())
-            .await
-            .map(|id| item.write().id = id),
+          SyncType::NewItem(list_id, item) => {
+            let item_data = item.read().clone();
+
+            api.new_item(list_id, item_data).await.map(|id| item.write().id = id)
+          }
         };
 
         // Display potential errors to the user
@@ -78,7 +83,10 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
   });
 
   match list.value() {
-    Some(Ok((meta, items))) => render!( ListPage { meta: *meta, items: *items } ),
+    Some(Ok((meta, items))) => render!(ListPage {
+      meta: *meta,
+      items: *items
+    }),
     Some(Err(_)) => {
       render!("An error occured. You are being redirected.")
     }
@@ -92,12 +100,19 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
 pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>) -> Element {
   let owned_meta = *meta;
   let syncer = use_coroutine_handle::<SyncType>(cx)?.clone();
-  
+  let first_render = use_state(cx, || true).clone();
+
+  debug!("Rendering list page, first render: {}", first_render.get());
   // Register effect to sync meta data to backend
   dioxus_signals::use_effect(cx, move || {
     // register effect and discard the unneeded RefGuard (it cannot be sent to the coroutine)
     let _ = owned_meta.read();
-    syncer.send(SyncType::Meta(owned_meta));
+
+    if !*first_render.current() {
+      syncer.send(SyncType::Meta(owned_meta));
+    } else {
+      first_render.set(false);
+    }
   });
 
   let meta = *meta;
@@ -106,70 +121,84 @@ pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>)
 
   // The compiler demands a binding!
   let x = render! {
-    PageHeader { 
-        input {
-            class: "w-full {PRIMARY_BG}",
-            onchange: move |evt| meta.write().name = evt.value.clone(),
-            value: "{meta.read().name.as_str()}"
-        }
-    }
-    div { class: "space-y-1",
-        for item in items {
-            ItemView { item: item }
-        }
-    }
-    div { class: "flex",
-        button {
-            class: "material-symbols-outlined",
-            onclick: move |_| {
-                let new_item = Signal::new(Item {
-                    name: "".to_string(),
-                    checked: false,
-                    id: 0,
-                    amount: None,
-                    unit: None,
-                    article_id: None,
-                    alternative_article_ids: None,
-                });
-                syncer.send(SyncType::NewItem(meta.read().id, new_item));
-                items.write().push(new_item)
-            },
-        ADD
-        }
-    }
-    input { "search" }
-    span { class: "material-symbols-outlined", SEARCH }
-};
-x
+      PageHeader {
+          input {
+              class: "w-full {PRIMARY_BG}",
+              onchange: move |evt| meta.write().name = evt.value.clone(),
+              value: "{meta.read().name.as_str()}"
+          }
+      }
+      div { class: "space-y-1",
+          for item in items {
+              ItemView { item: item }
+          }
+      }
+      div { class: "flex",
+          button {
+              class: "material-symbols-outlined",
+              onclick: move |_| {
+                  let new_item = Signal::new(Item {
+                      name: "".to_string(),
+                      checked: false,
+                      id: 0,
+                      amount: None,
+                      unit: None,
+                      article_id: None,
+                      alternative_article_ids: None,
+                  });
+                  syncer.send(SyncType::NewItem(meta.read().id, new_item));
+                  items.write().push(new_item)
+              },
+              ADD
+          }
+
+          input { "search" }
+          span { class: "material-symbols-outlined", SEARCH }
+      }
+  };
+  x
 }
 
 #[component]
 pub(super) fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
   let syncer = use_coroutine_handle::<SyncType>(cx)?.clone();
+  let first_render = use_state(cx, || true).clone();
   to_owned![item];
+
   dioxus_signals::use_effect(cx, move || {
     let _ = item.read();
-    syncer.send(SyncType::UpdateItem(item));
+    if !*first_render.current() {
+      syncer.send(SyncType::UpdateItem(item));
+    } else {
+      first_render.set(false);
+    }
   });
+
+  // This cannot go inline, as it will cause the underlying RefCell to panic
+  let checked = item.read().checked;
 
   // Unnecessary bindings are the price we pay for the compiler to be happy
   // You know the saying - happy compiler, happy life
   let x = render!(
-    div { class: "flex",
-        span { class: "material-symbols-outlined",
-            if item.read().checked {
-            CHECKBOX_CHECKED
-            } else {
-            CHECKBOX_UNCHECKED
-            }
-        }
-        input {
-            class: "{INLINE_INPUT} flex-grow",
-            onchange: move |evt| item.write().name = evt.value.clone(),
-            value: "{item.read().name}"
-        }
-        span { class: "material-symbols-outlined", DELETE }
-    }
+      div { class: "flex",
+          button {
+              class: "material-symbols-outlined",
+              onclick: move |_| {
+                  item.write().checked = !checked;
+              },
+              if item.read().checked {
+              CHECKBOX_CHECKED
+              } else {
+              CHECKBOX_UNCHECKED
+              }
+          }
+          input {
+              class: "{INLINE_INPUT} flex-grow",
+              onchange: move |evt| item.write().name = evt.value.clone(),
+              value: "{item.read().name}"
+          }
+          button { class: "material-symbols-outlined", DELETE }
+      }
   );
-    x
+  x
 }

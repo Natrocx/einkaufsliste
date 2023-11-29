@@ -9,7 +9,6 @@ use crate::ui::Route;
 
 #[component(no_case_check)]
 pub fn ErrorHandler(cx: Scope) -> Element {
-
   let errors = use_ref(cx, HashSet::new);
   let navigator = use_navigator(cx).clone();
 
@@ -48,11 +47,11 @@ pub fn ErrorHandler(cx: Scope) -> Element {
   });
 
   render! {
-    Outlet::<Route> {}
-    errors.read().iter().map(|error| {
-                        rsx! {
-                        p { error.as_str() }
-                        }
-                    })
-}
+      Outlet::<Route> {}
+      errors.read().iter().map(|error| {
+                          rsx! {
+                          p { error.as_str() }
+                          }
+                      })
+  }
 }

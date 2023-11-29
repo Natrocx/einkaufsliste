@@ -76,6 +76,19 @@ pub async fn store_item_attached(
   Response::from(item_id)
 }
 
+#[put("/item")]
+pub async fn update_item_attached(
+  param: Item,
+  state: web::Data<DbState>,
+  user: AuthenticatedUser,
+) -> Response<()> {
+  state.verify_access::<Item, User>(param.id, user.id)?;
+
+  state.store_unlisted(&param, param.id)?;
+
+  Response::from(())
+}
+
 #[get("/itemList/{id}/flat")]
 pub async fn get_item_list_flat(
   list_id: web::Path<u64>,
@@ -141,7 +154,8 @@ pub async fn update_item_list(
 ) -> Response<()> {
   state.verify_access::<List, User>(param.id, user.id)?;
 
-  state.store_listed(&param, user.id, param.id)?;
+  // TODO: verify items?
+  state.store_unlisted(&param, param.id)?;
 
   Response::from(())
 }

@@ -16,7 +16,7 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::SameSite;
 use actix_web::middleware::Logger;
 use actix_web::HttpServer;
-use api::item::{get_item_list_flat, store_item_attached, store_item_list};
+use api::item::{get_item_list_flat, store_item_attached, store_item_list, update_item_attached, update_item_list};
 use api::shop::{get_shop, store_shop};
 use api::user::{get_users_lists, login_v1, register_v1};
 use db::DbState;
@@ -68,9 +68,12 @@ async fn main() -> std::io::Result<()> {
 
     let app = actix_web::App::new()
       .app_data(actix_web::web::Data::new(application_state.clone()))
+      // =========================== REGISTER ROUTES HERE ===========================
       .service(crate::api::article::store_article)
       .service(crate::api::article::get_article_by_id)
       .service(crate::api::item::get_item_by_id)
+      .service(update_item_attached)
+      .service(update_item_list)
       .service(get_item_list_flat)
       .service(store_item_list)
       .service(store_item_attached)
@@ -79,6 +82,7 @@ async fn main() -> std::io::Result<()> {
       .service(register_v1)
       .service(login_v1)
       .service(get_users_lists);
+    // =========================== REGISTER ROUTES HERE ===========================
 
     #[cfg(feature = "serve_frontend")]
     let app = { app.service(crate::util::serve_frontend::serve_frontend) };

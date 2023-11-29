@@ -54,34 +54,35 @@ pub fn homepage(cx: Scope) -> Element {
   };
 
   render!(
-    PageHeader { "Home" }
-    if !lists.is_empty() {
-        rsx!(
-        lists.iter().map(|list| {
-            //whyever the compiler can't do that itself....
-            let api = &_api;
-            rsx!(
-                div {
-                onclick: |_| {
-                    let navigator = use_navigator(cx);
-                    navigator.push(Route::List { id: list.id });
-                },
-                class: "flex flex-row flex-wrap gap-1",
-                self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
-                }
-            )
-        }))
-        }
-        else {
-        rsx!(p { "You have no lists yet." })
-        }
+      PageHeader { "Home" }
+      div { class: "flex flex-row flex-wrap gap-1",
+          if !lists.is_empty() {
+          rsx!(
+          lists.iter().map(|list| {
+              //whyever the compiler can't do that itself....
+              let api = &_api;
+              rsx!(
+                  div {
+                  onclick: |_| {
+                      let navigator = use_navigator(cx);
+                      navigator.push(Route::List { id: list.id });
+                  },
+                  self::list_preview { name: &list.name, image_id: list.image_id.map(|id| api.get_img_url(id)), shop_name: "Testshop" }
+                  })
+              })
+              )
+          }
+          else {
+          rsx!(p { "You have no lists yet." })
+          }
+      }
 
-    button {
-        class: "flex justify-center rounded-full bg-teal-600 px-2.5 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
-        onclick: on_new,
-        span { class: "material-symbols-outlined", ADD }
-    }
-)
+      button {
+          class: "flex justify-center rounded-full bg-teal-600 px-2.5 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
+          onclick: on_new,
+          span { class: "material-symbols-outlined", ADD }
+      }
+  )
 }
 
 #[derive(PartialEq, Clone, Debug, Props)]

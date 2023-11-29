@@ -29,4 +29,3 @@ pub struct LoginUserV1 {
   pub password: String,
 }
 impl_api_traits!(LoginUserV1);
-

@@ -12,6 +12,7 @@ pub fn setup_tracing() {
   let filter_layer = Targets::new()
     // hypers http2 library will spam logs for KeepAlive etc.
     .with_target("h2", LevelFilter::ERROR)
+    .with_target("hyper", LevelFilter::ERROR)
     .with_target("sled", LevelFilter::WARN)
     .with_target("frontend", LevelFilter::TRACE)
     .with_default(LevelFilter::DEBUG);

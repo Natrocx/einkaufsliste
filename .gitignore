@@ -9,7 +9,7 @@
 **/data.sled
 **/sessions.sled
 **/backend.toml
-/backend/web_root
+/backend/web_root/assets
 **/*.pem
 
 frontend/bower_components/**

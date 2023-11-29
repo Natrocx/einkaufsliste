@@ -332,6 +332,7 @@ impl ApiClient {
     ))
   }
 
+  #[tracing::instrument(skip(self))]
   pub(crate) async fn update_list_with_ref(&self, list: std::cell::Ref<'_, List>) -> Result<(), APIError> {
     let url = format!("{}/itemList", self.base_url);
 
@@ -341,6 +342,7 @@ impl ApiClient {
     Ok(())
   }
 
+  #[tracing::instrument(skip(self))]
   pub async fn update_item_with_ref(&self, item: Ref<'_, Item>) -> Result<(), APIError> {
     let url = format!("{}/item", self.base_url);
 
@@ -349,8 +351,9 @@ impl ApiClient {
     Ok(())
   }
 
+  #[tracing::instrument(skip(self))]
   pub async fn new_item(&self, list_id: u64, item: Item) -> Result<u64, APIError> {
-    let url = format!("{}/item", self.base_url);
+    let url = format!("{}/item/attached", self.base_url);
 
     // todo: read_untracked?
     let body = self
