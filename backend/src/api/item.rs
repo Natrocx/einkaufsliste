@@ -1,15 +1,16 @@
 use std::rc::Rc;
 
-use actix_web::{get, post, put, web};
+use actix_web::{get, post, put, web, delete};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::StoreItemAttached;
+use einkaufsliste::model::requests::{StoreItemAttached, DeleteItem};
 use einkaufsliste::model::user::User;
 use sled::transaction::{abort, TransactionalTree};
 use zerocopy::AsBytes;
 
+use crate::db::{RawRkyvStore, DbError};
 use crate::response::{Response, ResponseError};
-use crate::util::errors::{error, not_found};
+use crate::util::errors::{error, not_found, abort_error};
 use crate::util::identity_ext::AuthenticatedUser;
 use crate::{db, DbState};
 
@@ -87,6 +88,32 @@ pub async fn update_item_attached(
   state.store_unlisted(&param, param.id)?;
 
   Response::from(())
+}
+
+#[delete("/item")]
+pub async fn delete_item(param: DeleteItem, state: web::Data<DbState>, user: AuthenticatedUser) -> Response<()> {
+  state.verify_access::<Item, User>(param.item_id, user.id)?;
+
+  // delete actual Item data 
+  state.delete::<Item>(param.item_id)?;
+
+  // update affected list meta
+  //TODO: optimize? - this could operate on archived data
+  state.list_db.transaction(|tx_db| unsafe {
+    let mut current_list: List = <&sled::transaction::TransactionalTree as db::RawRkyvStore<einkaufsliste::model::list::List, 4096>>::get_unchecked(&tx_db, param.list_id).map_err(abort_error)?;
+    let item_id_idx = current_list.items.iter().position(|&x| x == param.item_id).ok_or(abort_error(DbError::NotFound))?;
+    current_list.items.remove(item_id_idx);
+    <&sled::transaction::TransactionalTree as db::RawRkyvStore<einkaufsliste::model::list::List, 4096>>::store_unlisted(&tx_db, param.list_id, &current_list).map_err(abort_error)?;
+
+    Ok(())
+  }) .map_err(|e| match e {
+        // return inner error if its a sled-user-error:
+        sled::transaction::TransactionError::Abort(e) => e.into(),
+        // if not, something else went wrong, so generic server error:
+        _ => error(e),
+      })?; 
+      
+       Response::from(())
 }
 
 #[get("/itemList/{id}/flat")]

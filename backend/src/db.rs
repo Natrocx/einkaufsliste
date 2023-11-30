@@ -180,6 +180,17 @@ impl DbState {
     Ok(user)
   }
 
+  pub fn delete<T: ApiObject<'static>>(&self, id: u64) -> Result<(), DbError>
+  where
+    Self: ObjectTree<T>, <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>, <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+  {
+    let tree = self.get_tree();
+
+    unsafe { <sled::Tree as RawRkyvStore<T, 4096>>::delete(tree, id) }?;
+
+    Ok(())
+  }
+
   /**
   Get an object from the database using an automatically selected tree.
   This will not check the Object using ByteCheck but rather trust, that the trees have not been manually filled with garbage.
@@ -420,6 +431,8 @@ pub trait RawRkyvStore<
   /// You must manually ensure, that objects in the tree represent an archive of the generic type.
   /// Calling this with the wrong generic type should be an easy catch through unit testing.
   unsafe fn get_unchecked(&self, id: u64) -> Result<T, DbError>;
+  
+  fn delete(&self, id: u64) -> Result<(), DbError>;
 }
 
 impl<T, const SIZE_HINT: usize> RawRkyvStore<T, SIZE_HINT> for sled::Tree
@@ -448,6 +461,13 @@ where
 
     rkyv::from_bytes_unchecked(&bytes).map_err(Into::into)
   }
+
+  fn delete(&self, id: u64) -> Result<(), DbError> {
+    match self.remove(id.to_ne_bytes()) {
+      Ok(_) => Ok(()),
+      Err(e) => Err(e.into()),
+    }
+  }
 }
 
 impl<T, const SIZE_HINT: usize> RawRkyvStore<T, SIZE_HINT> for &TransactionalTree
@@ -475,6 +495,13 @@ where
     let bytes = self.get(id.to_ne_bytes())?.ok_or(DbError::NotFound)?;
 
     rkyv::from_bytes_unchecked(&bytes).map_err(Into::into)
+  }
+
+  fn delete(&self, id: u64) -> Result<(), DbError> {
+    match self.remove(&id.to_ne_bytes()) {
+      Ok(_) => Ok(()),
+      Err(e) => Err(e.into()),
+    }
   }
 }
 

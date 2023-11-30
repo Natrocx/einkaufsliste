@@ -1,8 +1,8 @@
-use std::process::Command;
+use std::{process::Command, path::PathBuf};
 use std::rc::Rc;
 
 use einkaufsliste::model::requests::LoginUserV1;
-use frontend::service::api::ApiClient;
+use frontend::service::api::{ApiClient, ClientConfig};
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -17,7 +17,7 @@ async fn main() {
   //   .expect("failed to start backend");
   frontend::setup_tracing();
 
-  let client = Rc::new(ApiClient::new("https://localhost:8443".to_string()).unwrap());
+  let client = Rc::new(ApiClient::new_with_config("https://localhost:8443".to_string(), ClientConfig { encoding: einkaufsliste::Encoding::Rkyv, cookie_store_base_path: PathBuf::from("./") }).unwrap());
   println!("Unauthenticated lists: {:?}", client.fetch_all_lists().await);
 
   println!(

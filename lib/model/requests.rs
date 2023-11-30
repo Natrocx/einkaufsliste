@@ -29,3 +29,12 @@ pub struct LoginUserV1 {
   pub password: String,
 }
 impl_api_traits!(LoginUserV1);
+
+
+#[derive(Debug, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Clone)]
+#[archive_attr(derive(bytecheck::CheckBytes))]
+pub struct DeleteItem {
+  pub list_id: <List as Identifiable>::Id,
+  pub item_id: <Item as Identifiable>::Id,
+}
+impl_api_traits!(DeleteItem);

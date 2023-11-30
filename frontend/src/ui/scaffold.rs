@@ -17,7 +17,7 @@ pub fn PageHeader<'a>(cx: Scope, children: Element<'a>) -> Element {
               rsx!(
                   GoBackButton {
                       span {
-                          class: "material-symbols-outlined",
+                          class: "m-1 material-symbols-outlined",
                           consts::NAVIGATE_BACK
                   }
               }

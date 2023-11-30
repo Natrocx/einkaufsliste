@@ -1,12 +1,10 @@
-use std::cell::Cell;
-use std::collections::HashMap;
-
 use async_std::stream::StreamExt;
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use dioxus_signals::{use_signal, Effect, Signal};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::requests::DeleteItem;
 use tracing::debug;
 
 use crate::service::api::{APIError, ApiService};
@@ -17,8 +15,9 @@ use crate::ui::Route;
 #[derive(Debug, Clone)]
 enum SyncType {
   Meta(Signal<List>),
-  NewItem(u64, Signal<Item>),
+  NewItem(Signal<Item>),
   UpdateItem(Signal<Item>),
+  DeleteItem(u64),
 }
 
 #[component]
@@ -28,6 +27,7 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
   let navigator = use_navigator(cx);
   use_coroutine(cx, move |mut rx| {
     to_owned![api, error_handler];
+    let list_id = *id;
     async move {
       while let Some(message) = rx.next().await {
         tracing::debug!("Syncing with backend: {:?}", message);
@@ -36,11 +36,12 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
           SyncType::UpdateItem(item) => api.update_item_with_ref(item.read()).await,
           // When a new item is created, we need to tell the backend which list it belongs to;
           // the backend will further generate a new id for the item which is set here.
-          SyncType::NewItem(list_id, item) => {
+          SyncType::NewItem(item) => {
             let item_data = item.read().clone();
 
             api.new_item(list_id, item_data).await.map(|id| item.write().id = id)
-          }
+          },
+          SyncType::DeleteItem(item_id) => api.delete_item(DeleteItem {list_id, item_id}).await,
         };
 
         // Display potential errors to the user
@@ -96,13 +97,14 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
   }
 }
 
+/// This component serves as an "inner" component for the ListPage, maintaining effects and other
+/// state that needs to be initialized conditionally.
 #[component]
 pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>) -> Element {
   let owned_meta = *meta;
   let syncer = use_coroutine_handle::<SyncType>(cx)?.clone();
   let first_render = use_state(cx, || true).clone();
 
-  debug!("Rendering list page, first render: {}", first_render.get());
   // Register effect to sync meta data to backend
   dioxus_signals::use_effect(cx, move || {
     // register effect and discard the unneeded RefGuard (it cannot be sent to the coroutine)
@@ -117,10 +119,11 @@ pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>)
 
   let meta = *meta;
   let items = *items;
-  let syncer = use_coroutine_handle::<SyncType>(cx)?.clone();
 
   // The compiler demands a binding!
   let x = render! {
+    div {
+      class: "flex flex-col h-full",
       PageHeader {
           input {
               class: "w-full {PRIMARY_BG}",
@@ -128,43 +131,62 @@ pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>)
               value: "{meta.read().name.as_str()}"
           }
       }
-      div { class: "space-y-1",
+      div { class: "space-y-1 flex-grow",
           for item in items {
-              ItemView { item: item }
+              //TODO: read untracked
+              ItemView { key: "{item.read().id}", item: item, all_items: items}
           }
       }
-      div { class: "flex",
-          button {
-              class: "material-symbols-outlined",
-              onclick: move |_| {
-                  let new_item = Signal::new(Item {
-                      name: "".to_string(),
-                      checked: false,
-                      id: 0,
-                      amount: None,
-                      unit: None,
-                      article_id: None,
-                      alternative_article_ids: None,
-                  });
-                  syncer.send(SyncType::NewItem(meta.read().id, new_item));
-                  items.write().push(new_item)
-              },
-              ADD
-          }
-
-          input { "search" }
-          span { class: "material-symbols-outlined", SEARCH }
-      }
+      AddItemView { items: items }
+    }
   };
   x
 }
 
 #[component]
-pub(super) fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
-  let syncer = use_coroutine_handle::<SyncType>(cx)?.clone();
+pub fn AddItemView(cx: Scope, items: Signal<Vec<Signal<Item>>>) -> Element {
+  let syncer = use_coroutine_handle(cx)?;
+  let new_item_name = use_signal(cx, String::new);
+
+  let x = render!(
+      form {
+          class: "flex m-1",
+          onsubmit: move |evt| {
+              let item_name = evt.values["new-item-name"][0].clone();
+              let new_item = Signal::new(Item {
+                  name: item_name,
+                  checked: false,
+                  id: 0,
+                  amount: None,
+                  unit: None,
+                  article_id: None,
+                  alternative_article_ids: None,
+              });
+              syncer.send(SyncType::NewItem(new_item));
+              items.write().push(new_item)
+          },
+          button { class: "material-symbols-outlined", r#type: "submit", ADD }
+
+          input {
+              id: "new-item-name",
+              name: "new-item-name",
+              class: "flex-grow {INLINE_INPUT}",
+              onchange: move |evt| *new_item_name.write() = evt.value.clone(),
+              value: "{new_item_name.read()}"
+          }
+          span { class: "material-symbols-outlined", SEARCH }
+      }
+  );
+  x
+}
+
+#[component]
+pub(super) fn ItemView(cx: Scope, item: Signal<Item>, all_items: Signal<Vec<Signal<Item>>>) -> Element {
+  let _syncer = use_coroutine_handle::<SyncType>(cx)?;
   let first_render = use_state(cx, || true).clone();
   to_owned![item];
 
+  let syncer = _syncer.clone();
   dioxus_signals::use_effect(cx, move || {
     let _ = item.read();
     if !*first_render.current() {
@@ -176,6 +198,8 @@ pub(super) fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
 
   // This cannot go inline, as it will cause the underlying RefCell to panic
   let checked = item.read().checked;
+  
+  let syncer = _syncer.clone();
 
   // Unnecessary bindings are the price we pay for the compiler to be happy
   // You know the saying - happy compiler, happy life
@@ -197,7 +221,17 @@ pub(super) fn ItemView(cx: Scope, item: Signal<Item>) -> Element {
               onchange: move |evt| item.write().name = evt.value.clone(),
               value: "{item.read().name}"
           }
-          button { class: "material-symbols-outlined", DELETE }
+          button {
+              class: "material-symbols-outlined",
+              onclick: move |_| {
+                  let mut all_items = all_items.write();
+                  //TODO: read untracked - shouldn't matter much since the component will be destroyed but it will be faster once implemented
+                  let idx = all_items.iter().position(|i| i.read().id == item.read().id).unwrap();
+                  all_items.remove(idx);
+                  syncer.send(SyncType::DeleteItem(item.read().id));
+              },
+              DELETE
+          }
       }
   );
   x

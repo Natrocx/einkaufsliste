@@ -9,7 +9,7 @@ use bytes::Bytes;
 use dioxus::prelude::Scope;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached};
+use einkaufsliste::model::requests::{LoginUserV1, RegisterUserV1, StoreItemAttached, DeleteItem};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
@@ -366,6 +366,14 @@ impl ApiClient {
         .try_into()
         .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
     ))
+  }
+  
+  pub async fn delete_item(&self, command: DeleteItem) -> Result<(), APIError> {
+    let url = format!("{}/item", self.base_url);
+
+    self.request(&url, Method::DELETE, &command).await?;
+
+    Ok(())
   }
 
   pub async fn fetch_list(&self, list_id: <List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
