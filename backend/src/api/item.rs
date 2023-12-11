@@ -1,4 +1,4 @@
-use std::rc::Rc;
+
 
 use actix_web::{get, post, put, web, delete};
 use einkaufsliste::model::item::Item;
@@ -8,7 +8,7 @@ use einkaufsliste::model::user::User;
 use sled::transaction::{abort, TransactionalTree};
 use zerocopy::AsBytes;
 
-use crate::db::{RawRkyvStore, DbError};
+use crate::db::DbError;
 use crate::response::{Response, ResponseError};
 use crate::util::errors::{error, not_found, abort_error};
 use crate::util::identity_ext::AuthenticatedUser;

@@ -1,7 +1,6 @@
 use dioxus::html::*;
 use dioxus::prelude::*;
 use dioxus_router::prelude::{use_navigator, GoBackButton};
-use dioxus_signals::Signal;
 
 use crate::ui::consts;
 

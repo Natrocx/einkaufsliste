@@ -2,23 +2,23 @@ use dioxus::prelude::*;
 use dioxus_router::prelude::*;
 use einkaufsliste::model::user::User;
 
-use crate::service::api::{use_provide_api_service, ApiService};
+use crate::service::api::use_provide_api_service;
 use crate::ui::consts::PRIMARY_BG;
 
 pub mod auth;
 pub mod consts;
 pub mod error;
 pub mod home;
+pub mod item;
 mod list;
 pub mod scaffold;
-pub mod item;
 
 pub fn app(cx: Scope) -> Element {
   // Component should never be reconstructed - it will cause errors if it is
   debug_assert_eq!(cx.generation(), 0);
 
   // provide api service and retain Rc for cleanup
-  let api_service = use_provide_api_service(&cx, "https://localhost:8443".to_string()).clone();
+  use_provide_api_service(&cx, "https://localhost:8443".to_string());
 
   render!(
     div { class: "h-screen w-screen {PRIMARY_BG} dark:text-white", root_component {} }

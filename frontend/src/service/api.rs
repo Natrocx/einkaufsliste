@@ -332,6 +332,8 @@ impl ApiClient {
     ))
   }
 
+    // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
+    #[allow(clippy::await_holding_refcell_ref)]
   #[tracing::instrument(skip(self))]
   pub(crate) async fn update_list_with_ref(&self, list: std::cell::Ref<'_, List>) -> Result<(), APIError> {
     let url = format!("{}/itemList", self.base_url);
@@ -342,6 +344,8 @@ impl ApiClient {
     Ok(())
   }
 
+    // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
+    #[allow(clippy::await_holding_refcell_ref)]
   #[tracing::instrument(skip(self))]
   pub async fn update_item_with_ref(&self, item: Ref<'_, Item>) -> Result<(), APIError> {
     let url = format!("{}/item", self.base_url);

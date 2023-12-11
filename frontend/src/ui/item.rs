@@ -1,10 +1,9 @@
 use dioxus::prelude::*;
 use dioxus_signals::Signal;
 use einkaufsliste::model::item::Item;
+
 use crate::ui::consts::*;
-
 use crate::ui::list::SyncType;
-
 
 #[component]
 pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
@@ -14,7 +13,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
   drag_drop: DragDropHandler,
 ) -> Element {
   to_owned![item];
-// This is a workaround for a bug in WebKitGtk that prevents drag and drop from working when no data is set
+  // This is a workaround for a bug in WebKitGtk that prevents drag and drop from working when no data is set
   // TODO: remove when fixed: https://bugs.webkit.org/show_bug.cgi?id=265857
   #[cfg(target_os = "linux")]
   {
@@ -22,21 +21,18 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
     use_on_create(cx, || {
       to_owned![eval_workaround];
       async move {
-        eval_workaround(
-          &format!(
-            r#"
+        eval_workaround(&format!(
+          r#"
             document.getElementById("item-view-{}").addEventListener("dragstart", (evt) => {{
               evt.dataTransfer.setData("text/plain", " ");
             }});
             "#,
-            item.read().id.to_string()
-          )
-        )
+          item.read().id.to_string()
+        ))
         .unwrap();
       }
     });
   }
-
 
   let _syncer = use_coroutine_handle::<SyncType>(cx)?;
   let first_render = use_state(cx, || true).clone();
@@ -53,8 +49,8 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
       first_render.set(false);
     }
   });
-  
-  // We sadly have to use ondragover here since the ondragenter/ondragleave events fire when moving 
+
+  // We sadly have to use ondragover here since the ondragenter/ondragleave events fire when moving
   // into a nested input element causing the visual space to flicker
   let ondragenter = move |evt: DragEvent| {
     evt.stop_propagation();
@@ -85,8 +81,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
 
   let maybe_padding = if *is_dragged_over.get() {
     String::from("pt-8")
-  }
-  else {
+  } else {
     String::new()
   };
 

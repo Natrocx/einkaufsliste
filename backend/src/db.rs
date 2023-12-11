@@ -186,7 +186,7 @@ impl DbState {
   {
     let tree = self.get_tree();
 
-    unsafe { <sled::Tree as RawRkyvStore<T, 4096>>::delete(tree, id) }?;
+    <sled::Tree as RawRkyvStore<T, 4096>>::delete(tree, id)?;
 
     Ok(())
   }
@@ -425,6 +425,9 @@ pub trait RawRkyvStore<
 > where
   <T as Archive>::Archived: rkyv::Deserialize<T, SharedDeserializeMap>,
 {
+  /// # Safety
+  /// You must manually ensure, that objects in the tree represent an archive of the generic type.
+  /// Calling this with the wrong generic type should be an easy catch through unit testing.
   unsafe fn store_unlisted(&self, id: u64, value: &T) -> Result<(), DbError>;
 
   /// # Safety

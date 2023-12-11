@@ -1,16 +1,10 @@
-use std::ops::Index;
-
 use async_std::stream::StreamExt;
-use const_format::concatcp;
-use dioxus::core::exports::bumpalo::AllocOrInitError;
-use dioxus::html::i;
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
-use dioxus_signals::{use_selector, use_signal, Effect, Signal};
+use dioxus_signals::{use_signal, Signal};
 use einkaufsliste::model::item::Item;
-use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::DeleteItem;
-use tracing::debug;
 
 use crate::service::api::{APIError, ApiService};
 use crate::ui::consts::*;
@@ -81,11 +75,12 @@ pub fn ListLoader(cx: Scope, id: u64) -> Element {
 pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>) -> Element {
   let owned_meta = *meta;
   let syncer = use_coroutine(cx, move |mut rx| {
-    let items = items.clone();
+    let items = *items;
     let api: ApiService = cx.consume_context().unwrap();
     let error_handler: Coroutine<APIError> = cx.consume_context().unwrap();
     let list_id = owned_meta.read().id;
 
+    #[allow(clippy::await_holding_refcell_ref)]
     async move {
       while let Some(message) = rx.next().await {
         tracing::debug!("Syncing with backend: {:?}", message);
@@ -178,7 +173,7 @@ pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>)
     dragged_item.set(Some(id));
   };
 
-    let meta = *meta;
+  let meta = *meta;
   let items = *items;
 
   // The compiler demands a binding!

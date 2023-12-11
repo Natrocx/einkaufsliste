@@ -12,10 +12,10 @@
 /backend/web_root/assets
 **/*.pem
 
-frontend/bower_components/**
-
 # Project-wide rust settings (uncomment to change)
 # **/.rustfmt.toml
 # **/rustfmt.toml
 # configure your linker here if needed
 /.cargo/config.toml
+
+rustc-ice-*
