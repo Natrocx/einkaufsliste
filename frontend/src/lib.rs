@@ -32,8 +32,10 @@ pub fn setup_tracing() {
   use tracing_subscriber_wasm::MakeConsoleWriter;
 
   let filter_layer = Targets::new()
-    .with_target("actix_identity", LevelFilter::ERROR)
+    .with_target("h2", LevelFilter::ERROR)
+    .with_target("hyper", LevelFilter::ERROR)
     .with_target("sled", LevelFilter::WARN)
+    .with_target("frontend", LevelFilter::TRACE)
     .with_default(LevelFilter::DEBUG);
 
   let fmt_layer = tracing_subscriber::fmt::layer()

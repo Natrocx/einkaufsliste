@@ -3,6 +3,7 @@ use dioxus_router::prelude::*;
 use einkaufsliste::model::user::User;
 
 use crate::service::api::{use_provide_api_service, ApiService};
+use crate::ui::consts::PRIMARY_BG;
 
 pub mod auth;
 pub mod consts;
@@ -10,6 +11,7 @@ pub mod error;
 pub mod home;
 mod list;
 pub mod scaffold;
+pub mod item;
 
 pub fn app(cx: Scope) -> Element {
   // Component should never be reconstructed - it will cause errors if it is
@@ -18,7 +20,9 @@ pub fn app(cx: Scope) -> Element {
   // provide api service and retain Rc for cleanup
   let api_service = use_provide_api_service(&cx, "https://localhost:8443".to_string()).clone();
 
-  render!(root_component {})
+  render!(
+    div { class: "h-screen w-screen {PRIMARY_BG} dark:text-white", root_component {} }
+  )
 }
 
 pub fn root_component(cx: Scope) -> Element {
@@ -38,7 +42,7 @@ fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let route = _route.join("/");
 
   cx.render(rsx! {
-      div { "The requested page at {route} could not be found. You are being redirected." }
+    div { "The requested page at {route} could not be found. You are being redirected." }
   })
 }
 

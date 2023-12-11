@@ -60,54 +60,54 @@ pub fn authentication_form(cx: Scope) -> Element {
   };
 
   cx.render(rsx! {
-      form {
-          class: "flex flex-col items-center object-center space-y-4 p-2 ",
-          onsubmit: move |evt| {
-              tracing::debug!("Encountered event: {:?}", evt);
-              evt.stop_propagation();
-              let username = evt.values["username"].first().unwrap().clone();
-              let password = evt.values["password"].first().unwrap().clone();
-              do_auth(username, password)
-          },
-          div { class: "flex flex-col text-left w-full",
-              label { class: "pl-2", r#for: "username", "Username" }
-              input {
-                  class: "w-full p-1 {INPUT_PRIMARY}",
-                  r#type: "text",
-                  id: "username",
-                  name: "username",
-                  autofocus: true
-              }
-          }
-          div { class: "flex flex-col text-left w-full",
-              label { r#for: "password", class: "pl-2", "Password" }
-              input {
-                  class: "w-full p-1 {INPUT_PRIMARY}",
-                  r#type: "password",
-                  id: "password",
-                  name: "password"
-              }
-          }
-          // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
-
-          div { class: "flex flex-row space-x-4",
-              button {
-                  class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
-                  r#type: "submit",
-                  onclick: |_| {
-                      auth_type.set(AuthType::Login);
-                  },
-                  "Login"
-              }
-              button {
-                  class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
-                  r#type: "submit",
-                  onclick: |_| {
-                      auth_type.set(AuthType::Register);
-                  },
-                  "Register"
-              }
-          }
+    form {
+      class: "flex flex-col items-center object-center space-y-4 p-2 ",
+      onsubmit: move |evt| {
+          tracing::debug!("Encountered event: {:?}", evt);
+          evt.stop_propagation();
+          let username = evt.values["username"].first().unwrap().clone();
+          let password = evt.values["password"].first().unwrap().clone();
+          do_auth(username, password)
+      },
+      div { class: "flex flex-col text-left w-full",
+        label { class: "pl-2", r#for: "username", "Username" }
+        input {
+          class: "w-full p-1 {INPUT_PRIMARY}",
+          r#type: "text",
+          id: "username",
+          name: "username",
+          autofocus: true
+        }
       }
+      div { class: "flex flex-col text-left w-full",
+        label { r#for: "password", class: "pl-2", "Password" }
+        input {
+          class: "w-full p-1 {INPUT_PRIMARY}",
+          r#type: "password",
+          id: "password",
+          name: "password"
+        }
+      }
+      // if we allow bubbling of the events here, the requested action will be performed through the forms onsubmit
+
+      div { class: "flex flex-row space-x-4",
+        button {
+          class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
+          r#type: "submit",
+          onclick: |_| {
+              auth_type.set(AuthType::Login);
+          },
+          "Login"
+        }
+        button {
+          class: "{BORDER_SMALL} {SECONDARY_BG} dark:hover:bg-zinc-700 hover:bg-gray-200",
+          r#type: "submit",
+          onclick: |_| {
+              auth_type.set(AuthType::Register);
+          },
+          "Register"
+        }
+      }
+    }
   })
 }
