@@ -115,7 +115,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
         ondragenter: ondragenter,
         ondragleave: ondragleave,
         prevent_default: "ondragover",
-        class: "material-symbols-outlined self-end",
+        class: "material-symbols-outlined {maybe_padding}",
         onclick: move |_| {
             item.write().checked = !checked;
         },
@@ -137,7 +137,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
         ondragenter: ondragenter,
         ondragleave: ondragleave,
         prevent_default: "ondragover",
-        class: "material-symbols-outlined self-end",
+        class: "material-symbols-outlined {maybe_padding}",
         onclick: move |_| {
             syncer.send(SyncType::DeleteItem(item.read().id));
         },
