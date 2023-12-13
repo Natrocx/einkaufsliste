@@ -1,8 +1,8 @@
 /*
  * Adapted from actix documentation
- */
+*/
 #[cfg(feature = "backend")]
-const MAX_SIZE: usize = 32_768; // max payload size in bytes
+const MAX_SIZE: usize = 4 * 1024 * 1024 * 1024; // max payload is 4mb - this should be sufficient for lists up to 20k items and all reasonably compressed images
 #[cfg(feature = "backend")]
 pub async fn collect_from_payload(
   mut payload: ::actix_web::dev::Payload,
