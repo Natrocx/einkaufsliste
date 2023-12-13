@@ -1,16 +1,15 @@
-
-
-use actix_web::{get, post, put, web, delete};
+use actix_web::{delete, get, post, put, web};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
-use einkaufsliste::model::requests::{StoreItemAttached, DeleteItem};
+use einkaufsliste::model::requests::{DeleteItem, MassStoreItems, StoreItemAttached};
 use einkaufsliste::model::user::User;
 use sled::transaction::{abort, TransactionalTree};
 use zerocopy::AsBytes;
 
+use super::user;
 use crate::db::DbError;
 use crate::response::{Response, ResponseError};
-use crate::util::errors::{error, not_found, abort_error};
+use crate::util::errors::{abort_error, error, not_found};
 use crate::util::identity_ext::AuthenticatedUser;
 use crate::{db, DbState};
 
@@ -91,29 +90,48 @@ pub async fn update_item_attached(
 }
 
 #[delete("/item")]
-pub async fn delete_item(param: DeleteItem, state: web::Data<DbState>, user: AuthenticatedUser) -> Response<()> {
+pub async fn delete_item(
+  param: DeleteItem,
+  state: web::Data<DbState>,
+  user: AuthenticatedUser,
+) -> Response<()> {
   state.verify_access::<Item, User>(param.item_id, user.id)?;
 
-  // delete actual Item data 
+  // delete actual Item data
   state.delete::<Item>(param.item_id)?;
 
   // update affected list meta
   //TODO: optimize? - this could operate on archived data
-  state.list_db.transaction(|tx_db| unsafe {
-    let mut current_list: List = <&sled::transaction::TransactionalTree as db::RawRkyvStore<einkaufsliste::model::list::List, 4096>>::get_unchecked(&tx_db, param.list_id).map_err(abort_error)?;
-    let item_id_idx = current_list.items.iter().position(|&x| x == param.item_id).ok_or(abort_error(DbError::NotFound))?;
-    current_list.items.remove(item_id_idx);
-    <&sled::transaction::TransactionalTree as db::RawRkyvStore<einkaufsliste::model::list::List, 4096>>::store_unlisted(&tx_db, param.list_id, &current_list).map_err(abort_error)?;
+  state
+    .list_db
+    .transaction(|tx_db| unsafe {
+      let mut current_list: List = <&sled::transaction::TransactionalTree as db::RawRkyvStore<
+        einkaufsliste::model::list::List,
+        4096,
+      >>::get_unchecked(&tx_db, param.list_id)
+      .map_err(abort_error)?;
+      let item_id_idx = current_list
+        .items
+        .iter()
+        .position(|&x| x == param.item_id)
+        .ok_or(abort_error(DbError::NotFound))?;
+      current_list.items.remove(item_id_idx);
+      <&sled::transaction::TransactionalTree as db::RawRkyvStore<
+        einkaufsliste::model::list::List,
+        4096,
+      >>::store_unlisted(&tx_db, param.list_id, &current_list)
+      .map_err(abort_error)?;
 
-    Ok(())
-  }) .map_err(|e| match e {
-        // return inner error if its a sled-user-error:
-        sled::transaction::TransactionError::Abort(e) => e.into(),
-        // if not, something else went wrong, so generic server error:
-        _ => error(e),
-      })?; 
-      
-       Response::from(())
+      Ok(())
+    })
+    .map_err(|e| match e {
+      // return inner error if its a sled-user-error:
+      sled::transaction::TransactionError::Abort(e) => e.into(),
+      // if not, something else went wrong, so generic server error:
+      _ => error(e),
+    })?;
+
+  Response::from(())
 }
 
 #[get("/itemList/{id}/flat")]
@@ -181,7 +199,11 @@ pub async fn update_item_list(
 ) -> Response<()> {
   state.verify_access::<List, User>(param.id, user.id)?;
 
-  // TODO: verify items?
+  // We check the items acls here to prevent leaking information about items that the user does not have access to
+  // doing this here alleviates the need to check the acls on GET requests
+  for item_id in &param.items {
+    state.verify_access::<Item, User>(*item_id, user.id)?;
+  }
   state.store_unlisted(&param, param.id)?;
 
   Response::from(())
