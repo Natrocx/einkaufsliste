@@ -1,7 +1,11 @@
-use std::{process::Command, path::PathBuf};
+use std::path::PathBuf;
+use std::process::Command;
 use std::rc::Rc;
+use std::time::Instant;
 
+use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::LoginUserV1;
+use einkaufsliste::Encoding;
 use frontend::service::api::{ApiClient, ClientConfig};
 use futures::future::join_all;
 use futures::stream::FuturesUnordered;
@@ -17,7 +21,16 @@ async fn main() {
   //   .expect("failed to start backend");
   frontend::setup_tracing();
 
-  let client = Rc::new(ApiClient::new_with_config("https://localhost:8443".to_string(), ClientConfig { encoding: einkaufsliste::Encoding::Rkyv, cookie_store_base_path: PathBuf::from("./") }).unwrap());
+  let client = Rc::new(
+    ApiClient::new_with_config(
+      "https://localhost:8443".to_string(),
+      ClientConfig {
+        encoding: einkaufsliste::Encoding::Rkyv,
+        cookie_store_base_path: PathBuf::from("./"),
+      },
+    )
+    .unwrap(),
+  );
   println!("Unauthenticated lists: {:?}", client.fetch_all_lists().await);
 
   println!(
@@ -65,4 +78,54 @@ async fn main() {
       .await
       .expect("Login with json to be successful"),
   );
+
+  client.set_encoding(einkaufsliste::Encoding::JSON);
+  println!("Item Mass creation test with json...");
+  let now = Instant::now();
+  many_new_items(client.clone()).await;
+  println!("Item Mass creation test with json took {:?}", now.elapsed());
+
+  client.set_encoding(Encoding::Rkyv);
+  println!("Item Mass creation test with rkyv...");
+  let now = Instant::now();
+  many_new_items(client.clone()).await;
+  println!("Item Mass creation test with rkyv took {:?}", now.elapsed());
+}
+
+pub async fn many_new_items(client: Rc<ApiClient>) {
+  let list_id = client
+    .create_list(&List {
+      id: 0,
+      name: "Mass creation test".to_string(),
+      shop: None,
+      image_id: None,
+      items: vec![],
+    })
+    .await
+    .unwrap();
+
+  for i in 0..100 {
+    let mut tasks = (0..100).map(|j| {
+      let client = client.clone();
+      async move {
+        client
+          .new_item(
+            list_id,
+            einkaufsliste::model::item::Item {
+              id: 0,
+              name: format!("Item {}", i * 100 + j),
+              checked: true,
+              amount: None,
+              unit: None,
+              article_id: None,
+              alternative_article_ids: None,
+            },
+          )
+          .await
+          .expect("create_item to be successful")
+      }
+    });
+
+    join_all(tasks).await;
+}
 }

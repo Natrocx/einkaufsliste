@@ -324,12 +324,7 @@ impl ApiClient {
 
     let body = self.request(&url, Method::POST, list).await?;
 
-    Ok(u64::from_be_bytes(
-      body
-        .as_ref()
-        .try_into()
-        .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
-    ))
+    self.decode(&body)
   }
 
     // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
@@ -364,12 +359,7 @@ impl ApiClient {
       .request(&url, Method::POST, &StoreItemAttached { list_id, item })
       .await?;
 
-    Ok(u64::from_be_bytes(
-      body
-        .as_ref()
-        .try_into()
-        .map_err(|e: TryFromSliceError| APIError::Decoding(e.into()))?,
-    ))
+    self.decode(&body)
   }
 
   pub async fn delete_item(&self, command: DeleteItem) -> Result<(), APIError> {
