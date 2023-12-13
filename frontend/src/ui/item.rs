@@ -95,7 +95,9 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
       // The default ondragover handler is to prevent the drop event from firing
       // It needs to be disabled on the div and all its children
       prevent_default: "ondragover",
-      prevent_default: "ondragenter",
+      // the ondragenter handlers cannot bubble so they are also registered on the child components
+      ondragenter: ondragenter,
+      ondragleave: ondragleave,
       ondragover: move |evt| {
           evt.stop_propagation();
       },
@@ -107,13 +109,13 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
       },
       ondragend: move |evt| {
           evt.stop_propagation();
+
           tracing::trace!("Drag ended for item: {:?}", item.read());
           is_getting_dragged.set(false);
       },
       ondrop: ondrop,
       button {
         ondragenter: ondragenter,
-        ondragleave: ondragleave,
         prevent_default: "ondragover",
         class: "material-symbols-outlined {maybe_padding}",
         onclick: move |_| {
@@ -127,7 +129,6 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
       }
       input {
         ondragenter: ondragenter,
-        ondragleave: ondragleave,
         prevent_default: "ondragover",
         class: "{INLINE_INPUT} {maybe_padding} flex-grow",
         onchange: move |evt| item.write().name = evt.value.clone(),
@@ -135,7 +136,6 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
       }
       button {
         ondragenter: ondragenter,
-        ondragleave: ondragleave,
         prevent_default: "ondragover",
         class: "material-symbols-outlined {maybe_padding}",
         onclick: move |_| {

@@ -1,5 +1,6 @@
 use frontend::setup_tracing;
 
+pub mod completions;
 pub mod index_desktop_html;
 pub mod service;
 pub mod ui;

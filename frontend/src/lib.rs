@@ -2,6 +2,7 @@
 pub mod index_desktop_html;
 pub mod service;
 pub mod ui;
+pub mod completions;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn setup_tracing() {
