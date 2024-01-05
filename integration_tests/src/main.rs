@@ -19,7 +19,7 @@ async fn main() {
   //   .args(["run", "--bin", "backend"])
   //   .spawn()
   //   .expect("failed to start backend");
-  frontend::setup_tracing();
+  //frontend::setup_tracing();
 
   let client = Rc::new(
     ApiClient::new_with_config(

@@ -1,0 +1,110 @@
+warning: unused import: `MassStoreItems`
+ --> backend/src/api/item.rs:4:50
+  |
+4 | use einkaufsliste::model::requests::{DeleteItem, MassStoreItems, StoreItemAttached};
+  |                                                  ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `super::user`
+ --> backend/src/api/item.rs:9:5
+  |
+9 | use super::user;
+  |     ^^^^^^^^^^^
+
+warning: `backend` (bin "backend") generated 2 warnings (run `cargo fix --bin "backend"` to apply 2 suggestions)
+    Finished release [optimized] target(s) in 0.73s
+     Running `/Users/natrocx/projects/einkaufsliste/target/release/backend`
+  [2m2023-12-14T14:03:29.022819Z[0m [32m INFO[0m [1;32mactix_server::builder[0m[32m: [32mstarting 8 workers[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/builder.rs:240
+
+  [2m2023-12-14T14:03:29.023281Z[0m [32m INFO[0m [1;32mactix_server::server[0m[32m: [32mActix runtime found; starting in Actix runtime[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/server.rs:196
+
+  [2m2023-12-14T15:16:15.433281Z[0m [34mDEBUG[0m [1;34mrustls::server::hs[0m[34m: [34mdecided upon suite TLS13_AES_256_GCM_SHA384[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rustls-0.20.9/src/server/hs.rs:382
+
+  [2m2023-12-14T15:16:15.433998Z[0m [34mDEBUG[0m [1;34mrustls::server::hs[0m[34m: [34mChosen ALPN protocol [104, 50][0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rustls-0.20.9/src/server/hs.rs:109
+
+  [2m2023-12-14T15:16:15.438463Z[0m [33m WARN[0m [1;33mactix_session::middleware[0m[33m: [33mThe session cookie attached to the incoming request failed to pass cryptographic checks (signature verification/decryption).[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-session-0.8.0/src/middleware.rs:340
+
+  [2m2023-12-14T15:16:15.439083Z[0m [34mDEBUG[0m [1;34mactix_web::middleware::logger[0m[34m: [34mError in response: "You are not authenticated. You must authenticate yourself to use this endpoint."[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:363
+
+  [2m2023-12-14T15:16:15.439157Z[0m [32m INFO[0m [1;32mactix_web::middleware::logger[0m[32m: [32m127.0.0.1 "GET /user/lists HTTP/2.0" 401 79 "-" "-" 0.000242[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:420
+
+  [2m2023-12-14T15:16:38.245696Z[0m [33m WARN[0m [1;33mactix_session::middleware[0m[33m: [33mThe session cookie attached to the incoming request failed to pass cryptographic checks (signature verification/decryption).[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-session-0.8.0/src/middleware.rs:340
+
+  [2m2023-12-14T15:16:38.246013Z[0m [34mDEBUG[0m [1;34meinkaufsliste::model::requests[0m[34m: [34mPayload encoding: Rkyv[0m
+    [2;3mat[0m lib/model/requests.rs:31
+
+  [2m2023-12-14T15:16:38.320838Z[0m [34mDEBUG[0m [1;34mbackend::response[0m[34m: [34mResponding with content type: Rkyv[0m
+    [2;3mat[0m backend/src/response.rs:126
+
+  [2m2023-12-14T15:16:38.321662Z[0m [32m INFO[0m [1;32mactix_web::middleware::logger[0m[32m: [32m127.0.0.1 "POST /login/v1 HTTP/2.0" 200 32 "-" "-" 0.075731[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:420
+
+  [2m2023-12-14T15:16:38.325539Z[0m [34mDEBUG[0m [1;34mbackend::response[0m[34m: [34mResponding with content type: Rkyv[0m
+    [2;3mat[0m backend/src/response.rs:126
+
+  [2m2023-12-14T15:16:38.327374Z[0m [32m INFO[0m [1;32mactix_web::middleware::logger[0m[32m: [32m127.0.0.1 "GET /user/lists HTTP/2.0" 200 401416 "-" "-" 0.003511[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:420
+
+  [2m2023-12-14T15:16:50.658965Z[0m [34mDEBUG[0m [1;34mbackend::response[0m[34m: [34mResponding with content type: Rkyv[0m
+    [2;3mat[0m backend/src/response.rs:126
+
+  [2m2023-12-14T15:16:50.659331Z[0m [32m INFO[0m [1;32mactix_web::middleware::logger[0m[32m: [32m127.0.0.1 "GET /itemList/10000001/flat HTTP/2.0" 200 464 "-" "-" 0.001863[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:420
+
+  [2m2023-12-14T15:16:58.245918Z[0m [34mDEBUG[0m [1;34mrustls::conn[0m[34m: [34mSending warning alert CloseNotify[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rustls-0.20.9/src/conn.rs:1343
+
+  [2m2023-12-14T16:37:14.977646Z[0m [34mDEBUG[0m [1;34mrustls::server::hs[0m[34m: [34mdecided upon suite TLS13_AES_256_GCM_SHA384[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rustls-0.20.9/src/server/hs.rs:382
+
+  [2m2023-12-14T16:37:14.978819Z[0m [34mDEBUG[0m [1;34mrustls::server::hs[0m[34m: [34mChosen ALPN protocol [104, 50][0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rustls-0.20.9/src/server/hs.rs:109
+
+  [2m2023-12-14T16:37:14.992074Z[0m [34mDEBUG[0m [1;34mbackend::response[0m[34m: [34mResponding with content type: Rkyv[0m
+    [2;3mat[0m backend/src/response.rs:126
+
+  [2m2023-12-14T16:37:14.992599Z[0m [32m INFO[0m [1;32mactix_web::middleware::logger[0m[32m: [32m127.0.0.1 "GET /user/lists HTTP/2.0" 200 401416 "-" "-" 0.000955[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-web-4.4.0/src/middleware/logger.rs:420
+
+  [2m2023-12-14T16:37:49.736993Z[0m [32m INFO[0m [1;32mactix_server::server[0m[32m: [32mSIGTERM received; starting graceful shutdown[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/server.rs:328
+
+  [2m2023-12-14T16:37:49.737462Z[0m [34mDEBUG[0m [1;34mactix_server::accept[0m[34m: [34mpaused accepting connections on 127.0.0.1:8443[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/accept.rs:309
+
+  [2m2023-12-14T16:37:49.737531Z[0m [32m INFO[0m [1;32mactix_server::accept[0m[32m: [32maccept thread stopped[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/accept.rs:143
+
+  [2m2023-12-14T16:37:49.737705Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.737742Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.737836Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.737869Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.738026Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.738153Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.738031Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+
+  [2m2023-12-14T16:37:49.738104Z[0m [32m INFO[0m [1;32mactix_server::worker[0m[32m: [32mshutting down idle worker[0m
+    [2;3mat[0m /Users/natrocx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/actix-server-2.3.0/src/worker.rs:595
+

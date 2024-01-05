@@ -13,6 +13,7 @@ use einkaufsliste::model::requests::{DeleteItem, LoginUserV1, RegisterUserV1, St
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
+use generational_box::GenerationalRef;
 use platform_dirs::AppDirs;
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::Method;
@@ -262,7 +263,7 @@ impl ApiClient {
     &'a self,
     url: &'a str,
     method: reqwest::Method,
-    body: std::cell::Ref<'a, T>,
+    body: GenerationalRef<T>,
   ) -> impl core::future::Future<Output = Result<Bytes, APIError>> + 'a
   where
     <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
@@ -327,10 +328,9 @@ impl ApiClient {
     self.decode(&body)
   }
 
-    // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
-    #[allow(clippy::await_holding_refcell_ref)]
-  #[tracing::instrument(skip(self))]
-  pub(crate) async fn update_list_with_ref(&self, list: std::cell::Ref<'_, List>) -> Result<(), APIError> {
+  // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
+  #[allow(clippy::await_holding_refcell_ref)]
+  pub(crate) async fn update_list_with_ref(&self, list: GenerationalRef<List>) -> Result<(), APIError> {
     let url = format!("{}/itemList", self.base_url);
 
     let _body = self.request_with_ref(&url, Method::PUT, list).await?;
@@ -339,10 +339,9 @@ impl ApiClient {
     Ok(())
   }
 
-    // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
-    #[allow(clippy::await_holding_refcell_ref)]
-  #[tracing::instrument(skip(self))]
-  pub async fn update_item_with_ref(&self, item: Ref<'_, Item>) -> Result<(), APIError> {
+  // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
+  #[allow(clippy::await_holding_refcell_ref)]
+  pub async fn update_item_with_ref(&self, item: GenerationalRef<Item>) -> Result<(), APIError> {
     let url = format!("{}/item", self.base_url);
 
     self.request_with_ref(&url, Method::PUT, item).await?;
@@ -354,7 +353,6 @@ impl ApiClient {
   pub async fn new_item(&self, list_id: u64, item: Item) -> Result<u64, APIError> {
     let url = format!("{}/item/attached", self.base_url);
 
-    // todo: read_untracked?
     let body = self
       .request(&url, Method::POST, &StoreItemAttached { list_id, item })
       .await?;

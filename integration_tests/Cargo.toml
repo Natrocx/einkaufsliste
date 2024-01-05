@@ -9,4 +9,4 @@ edition = "2021"
 einkaufsliste = { version = "0.1.0", path = ".." }
 frontend = { version = "0.1.0", path = "../frontend" }
 futures = "0.3.29"
-tokio = {version =  "1.32.0", features = ["full"]}
+tokio = {version =  "1.35.0", features = ["full"]}

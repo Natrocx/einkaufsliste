@@ -10,5 +10,6 @@
  ],
  "tailwindCSS.includeLanguages": {
      "rust": "html"
- },
+},
+"cmake.configureOnOpen": true,
 }

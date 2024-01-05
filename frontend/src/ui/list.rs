@@ -1,24 +1,23 @@
 use async_std::stream::StreamExt;
-use dioxus::html::div;
 use dioxus::prelude::*;
 use dioxus_router::prelude::use_navigator;
 use dioxus_signals::{use_signal, Signal};
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::List;
 use einkaufsliste::model::requests::DeleteItem;
-use rs_complete::CompletionTree;
 
 use crate::completions::complete;
 use crate::service::api::{APIError, ApiService};
 use crate::ui::consts::*;
 use crate::ui::item::ItemView;
 use crate::ui::scaffold::PageHeader;
-use crate::ui::Route;
+use crate::ui::{item, Route};
 
 #[derive(Debug, Clone)]
 pub(super) enum SyncType {
   Meta(Signal<List>),
   NewItem(String),
+  NewItemFull(Signal<Item>),
   UpdateItem(Signal<Item>),
   DeleteItem(u64),
 }
@@ -126,27 +125,27 @@ pub fn ListPage(cx: Scope, meta: Signal<List>, items: Signal<Vec<Signal<Item>>>)
 
   // The compiler demands a binding!
   let x = render! {
-    div { class: "flex flex-col h-full",
-      PageHeader {
-        input {
-          class: "w-full {PRIMARY_BG}",
-          onchange: move |evt| meta.write().name = evt.value.clone(),
-          value: "{meta.read().name.as_str()}"
-        }
-      }
-      div { class: "flex-grow space-y-1",
-        for item in items.into_iter().filter(|item| !item.read().checked) {
-          //TODO: read untracked
-          ItemView { key: "{item.read().id}", item: item, dragstart: ondragstart, drag_drop: ondrop }
-        }
-        hr { class: "h-px bg-zinc-500 border-0 mx-4 my-2" }
-        for item in items.into_iter().filter(|item| item.read().checked) {
+      div { class: "flex flex-col h-full",
+          PageHeader {
+              input {
+                  class: "w-full {PRIMARY_BG}",
+                  onchange: move |evt| meta.write().name = evt.value.clone(),
+                  value: "{meta.read().name.as_str()}"
+              }
+          }
+          // we need a tracked .read() call here since we want to move the item between the sections based on its checked state
+          div { class: "flex-grow space-y-1",
+              for item in items.into_iter().filter(|item| !item.read().checked) {
+                  ItemView { key: "{item.peek().id}", item: item, dragstart: ondragstart, drag_drop: ondrop }
+              }
+              hr { class: "h-px bg-zinc-500 border-0 mx-4 my-2" }
+              for item in items.into_iter().filter(|item| item.read().checked) {
 
-          ItemView { key: "{item.read().id}", item: item, dragstart: ondragstart, drag_drop: ondrop }
-        }
+                  ItemView { key: "{item.peek().id}", item: item, dragstart: ondragstart, drag_drop: ondrop }
+              }
+          }
+          AddItemView { items: items }
       }
-      AddItemView {items: items}
-    }
   };
   x
 }
@@ -173,44 +172,41 @@ pub fn AddItemView(cx: Scope, items: Signal<Vec<Signal<Item>>>) -> Element {
   };
 
   // the input field has a high tabindex such that it is selected after the elements and we need to
-  // make the generated completions selectable in the same order as they are rendered
-  let mut rolling_tabindex = 20002;
+  // make the generated completions selectable in reverse order as they are rendered
+  let mut rolling_tabindex = 20002 + completions.peek().len();
   let x = render!(
-    div {
-      class: "mx-6 flex flex-col items-start {SECONDARY_BG}",
-      for item in completions.value() {
-        button {
-          tabindex: rolling_tabindex,
-          class: "flex-grow",
-          onclick: move |_| {
-            item.write().checked = false;
-            syncer.send(SyncType::UpdateItem(item));
+      div { class: "mx-6 flex flex-col items-start {SECONDARY_BG}",
+          for item in completions.value() {
+              button {
+                  tabindex: "{rolling_tabindex}",
+                  class: "flex-grow",
+                  onclick: move |_| {
+                      item.write().checked = false;
+                      syncer.send(SyncType::UpdateItem(item));
+                  },
+                  "{item.read().name}"
+              }
+              {rolling_tabindex -= 1;}
+          }
+      }
+      form {
+          class: "flex m-1",
+          onsubmit: move |evt| {
+              let item_name = evt.values["new-item-name"][0].clone();
+              new_item_name.write().clear();
+              syncer.send(SyncType::NewItem(item_name));
           },
-          "{item.read().name}"
-        }
-        {rolling_tabindex += 1;}
-      }
-    }
-    form {
-      class: "flex m-1",
-      onsubmit: move |evt| {
-          let item_name = evt.values["new-item-name"][0].clone();
-          new_item_name.write().clear();
-          syncer.send(SyncType::NewItem(item_name));
-      },
-      button { tabindex: 20000, class: "material-symbols-outlined", r#type: "submit", ADD }
+          button { tabindex: 20000, class: "material-symbols-outlined", r#type: "submit", ADD }
 
-      input {
-        tabindex: 20001,
-        id: "new-item-name",
-        name: "new-item-name",
-        class: "flex-grow {INLINE_INPUT}",
-        oninput: oninput,
-        value: "{new_item_name.read()}"
+          input {
+              tabindex: 20001,
+              id: "new-item-name",
+              name: "new-item-name",
+              class: "flex-grow {INLINE_INPUT}",
+              oninput: oninput,
+              value: "{*new_item_name.read()}"
+          }
       }
-      // TODO: remove?
-      span { class: "material-symbols-outlined", SEARCH }
-    }
   );
   x
 }
@@ -244,6 +240,10 @@ fn make_syncer<T>(cx: Scope<T>, items: Signal<Vec<Signal<Item>>>, list_id: u64) 
             let item = new_item.read().clone();
             api.new_item(list_id, item).await.map(|id| new_item.write().id = id)
           }
+          SyncType::NewItemFull(item) => api
+            .new_item(list_id, item.read().clone())
+            .await
+            .map(|id| item.write().id = id),
           SyncType::DeleteItem(item_id) => {
             let idx = items
               .write()

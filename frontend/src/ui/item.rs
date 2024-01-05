@@ -54,7 +54,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
   // into a nested input element causing the visual space to flicker
   let ondragenter = move |evt: DragEvent| {
     evt.stop_propagation();
-    tracing::trace!("Drag entered over item: {:?}", item.read());
+    tracing::trace!("Drag entered over item: {:?}", *item.read());
     if !is_getting_dragged.get() {
       tracing::trace!("Adding visual space for dragged over item");
       is_dragged_over.set(true);
@@ -63,7 +63,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
 
   let ondrop = move |evt: DragEvent| {
     evt.stop_propagation();
-    tracing::trace!("Dropped dragged item into: {:?}", item.read());
+    tracing::trace!("Dropped dragged item into: {:?}", *item.read());
 
     is_dragged_over.set(false);
     drag_drop(item.read().id);
@@ -71,7 +71,7 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
 
   let ondragleave = move |evt: DragEvent| {
     evt.stop_propagation();
-    tracing::trace!("Drag left over item : {:?}", item.read());
+    tracing::trace!("Drag left over item : {:?}", *item.read());
     is_dragged_over.set(false);
   };
 
@@ -88,62 +88,61 @@ pub fn ItemView<DragStartHandler: Fn(u64), DragDropHandler: Fn(u64)>(
   // Unnecessary bindings are the price we pay for the compiler to be happy
   // You know the saying - happy compiler, happy life
   let x = render!(
-    div {
-      id: "item-view-{item.read().id}",
-      class: "flex",
-      draggable: true,
-      // The default ondragover handler is to prevent the drop event from firing
-      // It needs to be disabled on the div and all its children
-      prevent_default: "ondragover",
-      // the ondragenter handlers cannot bubble so they are also registered on the child components
-      ondragenter: ondragenter,
-      ondragleave: ondragleave,
-      ondragover: move |evt| {
-          evt.stop_propagation();
-      },
-      ondragstart: move |evt| {
-          evt.stop_propagation();
-          tracing::trace!("Drag started: {evt:?}");
-          is_getting_dragged.set(true);
-          dragstart(item.read().id);
-      },
-      ondragend: move |evt| {
-          evt.stop_propagation();
-
-          tracing::trace!("Drag ended for item: {:?}", item.read());
-          is_getting_dragged.set(false);
-      },
-      ondrop: ondrop,
-      button {
-        ondragenter: ondragenter,
-        prevent_default: "ondragover",
-        class: "material-symbols-outlined {maybe_padding}",
-        onclick: move |_| {
-            item.write().checked = !checked;
-        },
-        if item.read().checked {
-        CHECKBOX_CHECKED
-        } else {
-        CHECKBOX_UNCHECKED
-        }
+      div {
+          id: "item-view-{item.read().id}",
+          class: "flex",
+          draggable: true,
+          // The default ondragover handler is to prevent the drop event from firing
+          // It needs to be disabled on the div and all its children
+          prevent_default: "ondragover",
+          // the ondragenter handlers cannot bubble so they are also registered on the child components
+          ondragenter: ondragenter,
+          ondragleave: ondragleave,
+          ondragover: move |evt| {
+              evt.stop_propagation();
+          },
+          ondragstart: move |evt| {
+              evt.stop_propagation();
+              tracing::trace!("Drag started: {evt:?}");
+              is_getting_dragged.set(true);
+              dragstart(item.read().id);
+          },
+          ondragend: move |evt| {
+              evt.stop_propagation();
+              tracing::trace!("Drag ended for item: {:?}", * item.read());
+              is_getting_dragged.set(false);
+          },
+          ondrop: ondrop,
+          button {
+              ondragenter: ondragenter,
+              prevent_default: "ondragover",
+              class: "material-symbols-outlined {maybe_padding}",
+              onclick: move |_| {
+                  item.write().checked = !checked;
+              },
+              if item.read().checked {
+              CHECKBOX_CHECKED
+              } else {
+              CHECKBOX_UNCHECKED
+              }
+          }
+          input {
+              ondragenter: ondragenter,
+              prevent_default: "ondragover",
+              class: "{INLINE_INPUT} {maybe_padding} flex-grow",
+              onchange: move |evt| item.write().name = evt.value.clone(),
+              value: "{item.read().name}"
+          }
+          button {
+              ondragenter: ondragenter,
+              prevent_default: "ondragover",
+              class: "material-symbols-outlined {maybe_padding}",
+              onclick: move |_| {
+                  syncer.send(SyncType::DeleteItem(item.read().id));
+              },
+              DELETE
+          }
       }
-      input {
-        ondragenter: ondragenter,
-        prevent_default: "ondragover",
-        class: "{INLINE_INPUT} {maybe_padding} flex-grow",
-        onchange: move |evt| item.write().name = evt.value.clone(),
-        value: "{item.read().name}"
-      }
-      button {
-        ondragenter: ondragenter,
-        prevent_default: "ondragover",
-        class: "material-symbols-outlined {maybe_padding}",
-        onclick: move |_| {
-            syncer.send(SyncType::DeleteItem(item.read().id));
-        },
-        DELETE
-      }
-    }
   );
   x
 }

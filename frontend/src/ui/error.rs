@@ -47,11 +47,11 @@ pub fn ErrorHandler(cx: Scope) -> Element {
   });
 
   render! {
-    Outlet::<Route> {}
-    errors.read().iter().map(|error| {
-                        rsx! {
-                        p { error.as_str() }
-                        }
-                    })
+      Outlet::<Route> {}
+      errors.read().iter().map(|error| {
+                          rsx! {
+                          p { error.as_str() }
+                          }
+                      })
   }
 }

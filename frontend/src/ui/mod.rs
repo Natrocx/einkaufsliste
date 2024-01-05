@@ -21,7 +21,7 @@ pub fn app(cx: Scope) -> Element {
   use_provide_api_service(&cx, "https://localhost:8443".to_string());
 
   render!(
-    div { class: "h-screen w-screen {PRIMARY_BG} dark:text-white", root_component {} }
+      div { class: "h-screen w-screen {PRIMARY_BG} dark:text-white", root_component {} }
   )
 }
 
@@ -42,7 +42,7 @@ fn not_found(cx: Scope, _route: Vec<String>) -> Element {
   let route = _route.join("/");
 
   cx.render(rsx! {
-    div { "The requested page at {route} could not be found. You are being redirected." }
+      div { "The requested page at {route} could not be found. You are being redirected." }
   })
 }
 

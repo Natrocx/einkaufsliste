@@ -38,3 +38,8 @@ pub struct DeleteItem {
   pub item_id: <Item as Identifiable>::Id,
 }
 impl_api_traits!(DeleteItem);
+
+pub struct MassStoreItems {
+  pub items: Vec<Item>,
+  pub list_id: <List as Identifiable>::Id,
+}
