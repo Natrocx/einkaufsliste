@@ -1,24 +1,20 @@
-use frontend::setup_tracing;
+#![feature(get_mut_unchecked)]
 
-pub mod completions;
-pub mod index_desktop_html;
+use frontend::setup_tracing;
+use frontend::ui::Einkaufsliste;
+use iced::{Application, Settings};
+use ui::styles::DEFAULT_TEXT_SIZE;
+
 pub mod service;
 pub mod ui;
 
 fn main() {
   setup_tracing();
-  #[cfg(not(target_arch = "wasm32"))]
-  {
-    use dioxus_desktop::Config;
 
-    dioxus_desktop::launch_cfg(
-      ui::app,
-      Config::default().with_custom_index(index_desktop_html::INDEX_HTML.to_string()),
-    );
-  }
-
-  #[cfg(target_arch = "wasm32")]
-  {
-    dioxus_web::launch(ui::app);
-  }
+  let settings = Settings {
+    antialiasing: true,
+    default_text_size: DEFAULT_TEXT_SIZE,
+    ..Settings::default()
+  };
+  Einkaufsliste::run(settings).unwrap();
 }

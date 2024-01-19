@@ -1,6 +1,5 @@
+#![feature(get_mut_unchecked)]
 // expose services to enable testing them independently
-pub mod completions;
-pub mod index_desktop_html;
 pub mod service;
 pub mod ui;
 

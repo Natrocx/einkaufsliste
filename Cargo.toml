@@ -25,7 +25,7 @@ default = []
 backend = ["actix-web", "bytes", "futures", "async-trait", "log", "serde_json"]
 
 [workspace]
-members = ["frontend", "backend", "integration_tests", "runscript", "flontend/rust"]
+members = ["frontend", "backend", "integration_tests"]
 
 [lib]
 path = "lib/lib.rs"

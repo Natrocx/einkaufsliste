@@ -1,190 +1,115 @@
-use std::ops::Index;
-use std::time::Instant;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use dioxus::prelude::*;
-use dioxus_router::prelude::use_navigator;
-use einkaufsliste::model::list::List;
+use einkaufsliste::model::list::{FlatItemsList, List};
+use einkaufsliste::model::shop::{self, Shop};
+use iced::advanced::Widget;
+use iced::widget::{button, text, Column, Container, Row};
+use iced::{theme, Command, Element, Length, Theme};
+use iced_aw::native::{wrap_horizontal, wrap_vertical};
+use iced_aw::{floating_element, Icon};
 
-use crate::service::api::{APIError, ApiService};
-use crate::ui::consts::{ADD, CHECKBOX_CHECKED, CHECKBOX_UNCHECKED};
-use crate::ui::scaffold::PageHeader;
-use crate::ui::Route;
+use super::styles::{CircleButtonStyle, ListPreviewContainerStyle, DEFAULT_TEXT_SIZE};
+use super::MainMessage;
+use crate::service::api::ApiService;
 
-pub fn homepage(cx: Scope) -> Element {
-  let error_handler: &Coroutine<APIError> = use_coroutine_handle(cx)?;
-  let _navigator = use_navigator(cx);
-  let lists = use_state(cx, std::vec::Vec::new);
-  let api = use_context::<ApiService>(cx)?;
-  let selection_mode = use_state(cx, || false);
-  let selected_lists = use_ref(cx, || std::vec::Vec::<u64>::new());
-
-  // fetch the lists from the API when the component is first rendered but do not refetch on local changes to avoid overwriting them
-  use_future(cx, (), |()| {
-    to_owned![api, lists, error_handler];
-    async move {
-      let fetched_lists = match api.fetch_all_lists().await {
-        Ok(lists) => lists,
-        Err(e) => {
-          error_handler.send(e);
-          return;
-        }
-      };
-      lists.set(fetched_lists);
-    }
-  });
-
-  let on_new = move |_| {
-    to_owned![api, error_handler, lists];
-    let mut list = List {
-      name: "New List".to_string(),
-      image_id: None,
-      id: 0,
-      shop: None,
-      items: vec![],
-    };
-
-    cx.spawn(async move {
-      match api.create_list(&list).await {
-        Ok(id) => {
-          list.id = id;
-          lists.with_mut(|lists| lists.push(list));
-        }
-        Err(e) => {
-          error_handler.send(e);
-        }
-      }
-    })
-  };
-
-  render!(
-    PageHeader { "Home" }
-    div { class: "flex flex-row flex-wrap gap-1",
-      if !lists.is_empty() {
-      rsx!(
-      lists.iter().map(|list| {
-          rsx!(
-              self::ListPreview { list: &list, selection_mode: selection_mode.clone(), selected_lists: selected_lists }
-              )
-          })
-          )
-      }
-      else {
-      rsx!(p { "You have no lists yet." })
-      }
-    }
-
-    button {
-      class: "flex justify-center rounded-full bg-teal-600 px-2.5 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
-      onclick: on_new,
-      span { class: "material-symbols-outlined", ADD }
-    }
-    button {
-      class: "flex justify-center rounded-full bg-teal-600 px-2.5 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-teal-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600",
-      onclick: move |_| {
-        selection_mode.set(!*selection_mode.get());
-      },
-      "Toggle selection"
-    }
-  )
+pub(crate) struct HomeView {
+  api_service: ApiService,
+  lists: Arc<Vec<List>>,
+  shops: Arc<HashMap<u64, Shop>>,
+  selection_mode: bool,
+  selected_lists: Vec<u64>,
 }
 
-#[component]
-pub fn ListPreview<'a>(
-  cx: Scope<'a>,
-  list: &'a List,
-  selection_mode: UseState<bool>,
-  selected_lists: &'a UseRef<Vec<u64>>,
-) -> Element {
-  let pointer_down = use_state(cx, || None::<Instant>);
-  let toggle = move |selected: bool| {
-    if selected {
-      selected_lists.with_mut(|selected_lists| {
-        selected_lists.push(list.id);
-      })
-    } else {
-      selected_lists.with_mut(|selected_lists| {
-        selected_lists.retain(|id| *id != list.id);
-      })
-    };
-  };
+#[derive(Debug, Clone)]
+pub(crate) enum HomeMessage {
+  NewList,
+  ToggleSelectionMode,
+  SelectList(u64),
+  DeselectList(u64),
+  DeleteSelection,
+}
 
-  let class_list = if *selection_mode.get() { "opacity-30" } else { "" };
-
-  let first_render = cx.generation() == 0;
-  let on_pointer_down = use_future(cx, (), |()| {
-    to_owned![selection_mode];
-    async move {
-      if !first_render {
-      async_std::task::sleep(std::time::Duration::from_millis(1000)).await;
-      selection_mode.set(!*selection_mode.get());
-      }
+impl HomeView {
+  pub fn new(lists: Arc<Vec<List>>, shops: Arc<HashMap<u64, Shop>>, api_service: ApiService) -> Self {
+    Self {
+      api_service,
+      shops,
+      lists,
+      selection_mode: false,
+      selected_lists: Vec::new(),
     }
-  });
+  }
 
-  render!(
-    div {
-      style: "contain: paint;",
-    div { class: "flex flex-row content-center gap-1 mx-0.5 my-1 p-1 border border-teal-950 hover:border-teal-900 hover:border-2 {class_list}",
-      onpointerdown: move |event| {
-        pointer_down.set(Some(Instant::now()));
-        on_pointer_down.restart();
-      },
-      onpointercancel: move |_| {
-        pointer_down.set(None);
-        on_pointer_down.cancel(cx);
-      },
-      onpointerup: move |event| {
-        match pointer_down.get() {
-          Some(instant) if instant.elapsed().as_millis() > 1000 => {
-            event.stop_propagation();
+  pub fn update(&mut self, message: HomeMessage) -> Command<MainMessage> {
+    match message {
+      HomeMessage::NewList => {
+        let api_service = self.api_service.clone();
+
+        Command::perform(
+          async move { api_service.create_list(List::default()).await },
+          |res| match res {
+            Ok(list) => MainMessage::NewLists(vec![FlatItemsList::from_list_and_items(list, vec![])]),
+            Err(err) => MainMessage::Toast(err.into()),
           },
-          _ => {
-            let navigator = use_navigator(cx);
-            navigator.push(Route::List {id: list.id });
-          }
-        };
-      },
-      match list.image_id {
-      Some(ref src_url) => {
-          rsx!(img { src: "{src_url}" })
-      },
-      None => rsx!( p {
-      class: "flex-shrink self-center leading-none pr-0.5",
-      "?"
-      }),
-      },
-      div { class: "flex flex-col gap-x-1 flex-nowrap",
-        p { list.name.as_str() }
-        p { class: "text-xs text-teal-800", "TODO" }
+        )
+      }
+      HomeMessage::ToggleSelectionMode => {
+        self.selection_mode = !self.selection_mode;
+        Command::none()
+      }
+      HomeMessage::SelectList(id) => {
+        self.selected_lists.push(id);
+        Command::none()
+      }
+      HomeMessage::DeselectList(id) => {
+        self.selected_lists.retain(|&x| x != id);
+        Command::none()
+      }
+      HomeMessage::DeleteSelection => {
+        todo!()
       }
     }
-    if *selection_mode.get() {
-      rsx!(SelectionOverlay {
-      selected: selected_lists.read().contains(&list.id),
-      toggle: toggle,
-      })
-    }
   }
-  )
-}
 
-#[component]
-pub fn SelectionOverlay<SelectionToggle: Fn(bool)>(cx: Scope, selected: bool, toggle: SelectionToggle) -> Element<'a> {
-  render!(div {
-    class: "w-full h-full z-10 inset-0 bg-black bg-opacity-75 mix-blend-darken",
-    onclick: move |evt| {
-      evt.stop_propagation();
-      tracing::debug!("Clicked toggle overlay");
-      toggle(!selected);
-    },
-    span {
-      class: "material-symbols-outlined z-20 absolute top-0 right-0 m-2",
-      if *selected {
-        CHECKBOX_CHECKED
-      }
-      else {
-        CHECKBOX_UNCHECKED
-      }
-    }
-  })
+  pub fn view(&self) -> Element<HomeMessage> {
+    let double_text_size = DEFAULT_TEXT_SIZE * 2.0;
+    let previews: Vec<_> = self
+      .lists
+      .iter()
+      .map(|list| {
+        let shop_name = self.shops.get(&list.id).map_or("No shop", |shop| shop.name.as_str());
+        let preview = Container::new(Row::with_children(vec![
+          // TODO: Add icon
+          text("?").size(double_text_size).into(),
+          Column::with_children(vec![text(list.name.as_str()).into(), text(shop_name).into()]).into(),
+        ]))
+        .width(Length::Shrink)
+        .height(Length::Shrink)
+        .style(theme::Container::Custom(Box::new(ListPreviewContainerStyle::new(
+          theme::Container::Transparent,
+        ))))
+        .padding(10.0);
+
+        preview.into()
+      })
+      .collect();
+
+    let mut previews = wrap_horizontal(previews).spacing(10.0).padding(5.0);
+    // why no setters?
+    previews.height = Length::Fill;
+    previews.width = Length::Fill;
+
+    floating_element(
+      previews,
+      //Why does this not work???
+      //button(text(Icon::Plus))
+      button("+")
+        .style(theme::Button::Custom(Box::new(CircleButtonStyle::new(
+          theme::Button::Primary,
+        ))))
+        .on_press(HomeMessage::NewList),
+    )
+    .into()
   }
+}

@@ -6,14 +6,12 @@ use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use bytes::Bytes;
-use dioxus::prelude::Scope;
 use einkaufsliste::model::item::Item;
 use einkaufsliste::model::list::{FlatItemsList, List};
 use einkaufsliste::model::requests::{DeleteItem, LoginUserV1, RegisterUserV1, StoreItemAttached};
 use einkaufsliste::model::user::User;
 use einkaufsliste::model::Identifiable;
 use einkaufsliste::{ApiObject, Encoding};
-use generational_box::GenerationalRef;
 use platform_dirs::AppDirs;
 use reqwest::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use reqwest::Method;
@@ -46,20 +44,13 @@ lazy_static::lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct ApiService {
-  inner: Rc<ApiClient>,
-}
-
-pub fn use_provide_api_service<'a>(cx: &'a Scope<'a>, base_url: String) -> &'a ApiService {
-  cx.use_hook(|| {
-    let api_service = ApiService::new(base_url).unwrap();
-    cx.provide_context(api_service)
-  })
+  inner: Arc<ApiClient>,
 }
 
 impl ApiService {
-  pub fn new(base_url: String) -> Result<Self, APIError> {
+  pub fn new(base_url: String) -> Result<Self, ApiError> {
     Ok(Self {
-      inner: Rc::new(ApiClient::new(base_url)?),
+      inner: Arc::new(ApiClient::new(base_url)?),
     })
   }
 }
@@ -108,13 +99,13 @@ impl Default for ClientConfig {
 
 impl ApiClient {
   #[cfg(target_arch = "wasm32")]
-  fn build_client() -> Result<reqwest::Client, APIError> {
+  fn build_client() -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder().build().map_err(Into::into)
   }
 
   #[cfg(feature = "dev-certificate")]
   #[cfg(not(target_arch = "wasm32"))]
-  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, APIError> {
+  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, ApiError> {
     let cert = reqwest::Certificate::from_pem(DEVELOPMENT_CERTIFICATE)?;
     reqwest::Client::builder()
       .add_root_certificate(cert)
@@ -128,7 +119,7 @@ impl ApiClient {
 
   #[cfg(not(feature = "dev-certificate"))]
   #[cfg(not(target_arch = "wasm32"))]
-  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, APIError> {
+  fn build_client(cookie_store: Arc<CookieStoreRwLock>) -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder()
       .cookie_store(true)
       .cookie_provider(cookie_store)
@@ -139,7 +130,7 @@ impl ApiClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  fn setup_cookiestore(path: &Path) -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, APIError> {
+  fn setup_cookiestore(path: &Path) -> Result<Arc<reqwest_cookie_store::CookieStoreRwLock>, ApiError> {
     let cookie_store = {
       let actual_path = path.join(COOKIE_STORE_FILE_NAME);
       if let Ok(file) = std::fs::File::open(&actual_path).map(std::io::BufReader::new) {
@@ -183,7 +174,7 @@ impl ApiClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  pub fn new_with_config(base_url: String, config: ClientConfig) -> Result<Self, APIError> {
+  pub fn new_with_config(base_url: String, config: ClientConfig) -> Result<Self, ApiError> {
     let cookie_store = Self::setup_cookiestore(&config.cookie_store_base_path)?;
     let client = Self::build_client(cookie_store.clone())?;
 
@@ -196,7 +187,7 @@ impl ApiClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  pub fn new(base_url: String) -> Result<Self, APIError> {
+  pub fn new(base_url: String) -> Result<Self, ApiError> {
     let cookie_store = Self::setup_cookiestore(&APP_DIR)?;
     let client = Self::build_client(cookie_store.clone())?;
 
@@ -209,7 +200,7 @@ impl ApiClient {
   }
 
   #[cfg(target_arch = "wasm32")]
-  pub fn new(base_url: String) -> Result<Self, APIError> {
+  pub fn new(base_url: String) -> Result<Self, ApiError> {
     let client = Self::build_client()?;
 
     Ok(Self {
@@ -243,7 +234,7 @@ impl ApiClient {
     url: &str,
     method: reqwest::Method,
     body: &T,
-  ) -> Result<Bytes, APIError>
+  ) -> Result<Bytes, ApiError>
   where
     <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
     <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
@@ -258,36 +249,8 @@ impl ApiClient {
 
     response.error_for_status()?.bytes().await.map_err(Into::into)
   }
-
-  fn request_with_ref<'a, T: ApiObject<'static>>(
-    &'a self,
-    url: &'a str,
-    method: reqwest::Method,
-    body: GenerationalRef<T>,
-  ) -> impl core::future::Future<Output = Result<Bytes, APIError>> + 'a
-  where
-    <T as rkyv::Archive>::Archived: rkyv::Deserialize<T, rkyv::de::deserializers::SharedDeserializeMap>,
-    <T as rkyv::Archive>::Archived: rkyv::CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>,
-  {
-    let encoded_body = self.encode(body.deref());
-    // drop refcell guards before sending the request and consequently yielding at next .await
-    drop(body);
-
-    async move {
-      let response = self
-        .client
-        .request(method, url)
-        .body(encoded_body?)
-        .headers(self.get_request_headers())
-        .send()
-        .await?;
-
-      response.error_for_status()?.bytes().await.map_err(Into::into)
-    }
-  }
-
   #[tracing::instrument]
-  pub async fn login(&self, credentials: LoginUserV1) -> Result<User, APIError> {
+  pub async fn login(&self, credentials: LoginUserV1) -> Result<User, ApiError> {
     let url = format!("{}/login/v1", self.base_url);
 
     let response_body_bytes = self.request(&url, Method::POST, &credentials).await?;
@@ -298,7 +261,7 @@ impl ApiClient {
   }
 
   #[tracing::instrument]
-  pub async fn register(&self, credentials: RegisterUserV1) -> Result<User, APIError> {
+  pub async fn register(&self, credentials: RegisterUserV1) -> Result<User, ApiError> {
     let url = format!("{}/register/v1", self.base_url);
 
     let body_bytes = self.request(&url, Method::POST, &credentials).await?;
@@ -309,7 +272,7 @@ impl ApiClient {
   }
 
   #[tracing::instrument]
-  pub async fn fetch_all_lists(&self) -> Result<Vec<List>, APIError> {
+  pub async fn fetch_all_lists(&self) -> Result<Vec<List>, ApiError> {
     let url = format!("{}/user/lists", self.base_url);
 
     let body = self.request(&url, Method::GET, &()).await?;
@@ -320,37 +283,18 @@ impl ApiClient {
   }
 
   #[tracing::instrument]
-  pub async fn create_list(&self, list: &List) -> Result<u64, APIError> {
+  pub async fn create_list(&self, mut list: List) -> Result<List, ApiError> {
     let url = format!("{}/itemList", self.base_url);
 
-    let body = self.request(&url, Method::POST, list).await?;
+    let body = self.request(&url, Method::POST, &list).await?;
 
-    self.decode(&body)
-  }
+    list.id = self.decode(&body)?;
 
-  // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
-  #[allow(clippy::await_holding_refcell_ref)]
-  pub(crate) async fn update_list_with_ref(&self, list: GenerationalRef<List>) -> Result<(), APIError> {
-    let url = format!("{}/itemList", self.base_url);
-
-    let _body = self.request_with_ref(&url, Method::PUT, list).await?;
-    // nothing to extract/check here except for the response status (handled above)
-
-    Ok(())
-  }
-
-  // The functions called _with_ref are specifically crafted to serialize the data and drop the ref before awaiting anything
-  #[allow(clippy::await_holding_refcell_ref)]
-  pub async fn update_item_with_ref(&self, item: GenerationalRef<Item>) -> Result<(), APIError> {
-    let url = format!("{}/item", self.base_url);
-
-    self.request_with_ref(&url, Method::PUT, item).await?;
-
-    Ok(())
+    Ok(list)
   }
 
   #[tracing::instrument(skip(self))]
-  pub async fn new_item(&self, list_id: u64, item: Item) -> Result<u64, APIError> {
+  pub async fn new_item(&self, list_id: u64, item: Item) -> Result<u64, ApiError> {
     let url = format!("{}/item/attached", self.base_url);
 
     let body = self
@@ -360,7 +304,7 @@ impl ApiClient {
     self.decode(&body)
   }
 
-  pub async fn delete_item(&self, command: DeleteItem) -> Result<(), APIError> {
+  pub async fn delete_item(&self, command: DeleteItem) -> Result<(), ApiError> {
     let url = format!("{}/item", self.base_url);
 
     self.request(&url, Method::DELETE, &command).await?;
@@ -368,7 +312,7 @@ impl ApiClient {
     Ok(())
   }
 
-  pub async fn fetch_list(&self, list_id: <List as Identifiable>::Id) -> Result<FlatItemsList, APIError> {
+  pub async fn fetch_list(&self, list_id: <List as Identifiable>::Id) -> Result<FlatItemsList, ApiError> {
     let url = format!("{}/itemList/{}/flat", self.base_url, list_id);
 
     let body = self.request(&url, Method::GET, &()).await?;
@@ -387,7 +331,7 @@ impl ApiClient {
 
   The data is required to implement all possible encodings for reasons of type solvability.
   */
-  fn encode<T>(&self, data: &T) -> Result<Vec<u8>, APIError>
+  fn encode<T>(&self, data: &T) -> Result<Vec<u8>, ApiError>
   where
     T: serde::Serialize + rkyv::Archive + rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<4096>>,
   {
@@ -398,7 +342,7 @@ impl ApiClient {
     }
   }
 
-  fn decode<'a, T>(&self, data: &'a [u8]) -> Result<T, APIError>
+  fn decode<'a, T>(&self, data: &'a [u8]) -> Result<T, ApiError>
   where
     T: serde::de::DeserializeOwned + rkyv::Archive,
     T::Archived: 'a + rkyv::Deserialize<T, SharedDeserializeMap> + CheckBytes<DefaultValidator<'a>>,
@@ -412,55 +356,55 @@ impl ApiClient {
 }
 
 #[derive(Debug)]
-pub enum APIError {
+pub enum ApiError {
   Network(reqwest::Error),
   InternalServer,
   Unauthorized,
   Unauthenticated,
-  Encoding(Box<dyn std::error::Error>),
-  Decoding(Box<dyn std::error::Error>),
+  Encoding(String),
+  Decoding(String),
   Unknown(String),
 }
 
-impl std::fmt::Display for APIError {
+impl std::fmt::Display for ApiError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      APIError::Network(e) => write!(f, "A network error occurred: {e}"),
-      APIError::InternalServer => write!(f, "An internal server error occured."),
-      APIError::Unauthorized => write!(f, "You are not authorized to access the requested resource."),
-      APIError::Unauthenticated => write!(f, "You must authenticate yourself to access the requested resource."),
-      APIError::Encoding(e) => write!(f, "An unexpected error occurred while encoding the request: {e}"),
-      APIError::Decoding(e) => write!(f, "An unexpected error occurred while decoding the response: {e}"),
-      APIError::Unknown(e) => write!(f, "Unknown error: {}", e),
+      ApiError::Network(e) => write!(f, "A network error occurred: {e}"),
+      ApiError::InternalServer => write!(f, "An internal server error occured."),
+      ApiError::Unauthorized => write!(f, "You are not authorized to access the requested resource."),
+      ApiError::Unauthenticated => write!(f, "You must authenticate yourself to access the requested resource."),
+      ApiError::Encoding(e) => write!(f, "An unexpected error occurred while encoding the request: {e}"),
+      ApiError::Decoding(e) => write!(f, "An unexpected error occurred while decoding the response: {e}"),
+      ApiError::Unknown(e) => write!(f, "Unknown error: {}", e),
     }
   }
 }
 
-impl From<serde_json::Error> for APIError {
+impl From<serde_json::Error> for ApiError {
   fn from(e: serde_json::Error) -> Self {
     match e.is_io() {
-      true => APIError::Encoding(e.into()),
-      false => APIError::Decoding(e.into()),
+      true => ApiError::Encoding(e.to_string()),
+      false => ApiError::Decoding(e.to_string()),
     }
   }
 }
 
-impl From<reqwest::Error> for APIError {
+impl From<reqwest::Error> for ApiError {
   fn from(e: reqwest::Error) -> Self {
     match e.status() {
       Some(status) => match status.as_u16() {
-        401 => APIError::Unauthenticated,
-        403 => APIError::Unauthorized,
-        500 => APIError::InternalServer,
-        _ => APIError::Unknown(format!("Unexpected status code: {} with message {e}", status,)),
+        401 => ApiError::Unauthenticated,
+        403 => ApiError::Unauthorized,
+        500 => ApiError::InternalServer,
+        _ => ApiError::Unknown(format!("Unexpected status code: {} with message {e}", status,)),
       },
-      None => APIError::Network(e),
+      None => ApiError::Network(e),
     }
   }
 }
 
 impl<S: std::error::Error, T: std::error::Error, H: std::error::Error>
-  From<rkyv::ser::serializers::CompositeSerializerError<S, T, H>> for APIError
+  From<rkyv::ser::serializers::CompositeSerializerError<S, T, H>> for ApiError
 {
   fn from(e: rkyv::ser::serializers::CompositeSerializerError<S, T, H>) -> Self {
     // i dont want to deal with lifetimes here so no stacktrace - deal with it :))))
@@ -469,7 +413,7 @@ impl<S: std::error::Error, T: std::error::Error, H: std::error::Error>
   }
 }
 
-impl<C: std::error::Error, D: std::error::Error> From<CheckDeserializeError<C, D>> for APIError {
+impl<C: std::error::Error, D: std::error::Error> From<CheckDeserializeError<C, D>> for ApiError {
   fn from(e: CheckDeserializeError<C, D>) -> Self {
     Self::Decoding(e.to_string().into())
   }

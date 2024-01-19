@@ -15,6 +15,18 @@ pub struct List {
   pub items: Vec<<Item as Identifiable>::Id>,
 }
 
+impl Default for List {
+  fn default() -> Self {
+    Self {
+      id: 0,
+      name: String::from("New List"),
+      shop: None,
+      image_id: None,
+      items: Vec::new(),
+    }
+  }
+}
+
 impl From<&FlatItemsList> for List {
   fn from(value: &FlatItemsList) -> Self {
     Self {
@@ -29,7 +41,7 @@ impl From<&FlatItemsList> for List {
 
 impl_api_traits!(List);
 
-#[derive(Debug, Default, Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Archive, Serialize, Deserialize, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 #[archive_attr(derive(bytecheck::CheckBytes))]
 pub struct FlatItemsList {
   pub id: <List as Identifiable>::Id, // this is intentionally Lists id, as they have to have the same Type
@@ -74,4 +86,10 @@ impl Identifiable for List {
 
 unsafe impl HasTypeDenominator for List {
   const DENOMINATOR: u64 = 0;
+}
+
+impl Default for FlatItemsList {
+  fn default() -> Self {
+      FlatItemsList::from_list_and_items(List::default(), vec![])
+  }
 }
