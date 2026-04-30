@@ -1,3 +1,8 @@
+# Status
+The project is not actively developed and most of its features and research into zero-copy programming patterns are incomplete. 
+
+I do not know whether I will continue work on this project or when that might be.
+
 # Dependencies
 The following applications are required in addition to rust to facilitate smooth development:
 
